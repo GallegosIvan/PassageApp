@@ -9,6 +9,8 @@
 .history
 .svn/
 migrate_working_dir/
+.env
+.env.*
 
 # IntelliJ related
 *.iml
@@ -41,3 +43,31 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Secrets & API keys
+google-services.json
+GoogleService-Info.plist
+*.env.local
+
+# Android signing
+android/key.properties
+*.keystore
+*.jks
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Runner.xcworkspace/xcshareddata/
+*.ipa
+
+# Build outputs
+*.apk
+*.aab
+
+# pubspec.lock (optional but recommended for apps)
+# pubspec.lock
+
+# Android local config
+android/local.properties

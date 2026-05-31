@@ -1,0 +1,96 @@
+
+<div style="padding: 1rem 0; display: grid; gap: 12px;">
+
+  <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <span style="background:#EEEDFE; color:#3C3489; font-size:12px; font-weight:500; padding:3px 10px; border-radius:20px;">Phase 1 — Weeks 1–2</span>
+      <span style="font-size:14px; font-weight:500; color:var(--color-text-primary);">Foundation & DB setup</span>
+    </div>
+    <div style="display:grid; gap:6px;">
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Supabase project + auth, users, RLS</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">All DB tables including new AI tables (ai_conversations, ai_messages, ai_usage)</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Flutter project + folder structure + packages installed</span></div>
+    </div>
+  </div>
+
+  <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <span style="background:#EEEDFE; color:#3C3489; font-size:12px; font-weight:500; padding:3px 10px; border-radius:20px;">Phase 2 — Weeks 3–5</span>
+      <span style="font-size:14px; font-weight:500; color:var(--color-text-primary);">Auth & Bible reader</span>
+    </div>
+    <div style="display:grid; gap:6px;">
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Sign up + log in screens via Supabase Auth</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Bible reader using API.Bible — browse books, chapters, verses</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Tap verse to highlight or add private annotation</span></div>
+    </div>
+  </div>
+
+  <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <span style="background:#EEEDFE; color:#3C3489; font-size:12px; font-weight:500; padding:3px 10px; border-radius:20px;">Phase 3 — Weeks 6–10</span>
+      <span style="font-size:14px; font-weight:500; color:var(--color-text-primary);">Communities — the core loop</span>
+    </div>
+    <div style="display:grid; gap:6px;">
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Browse + join public communities by book and chapter</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Post interpretations with verse reference + reply threads</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Supabase Realtime — live post updates without refresh</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Home feed — your communities + recent activity</span></div>
+    </div>
+  </div>
+
+  <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <span style="background:#EEEDFE; color:#3C3489; font-size:12px; font-weight:500; padding:3px 10px; border-radius:20px;">Phase 4 — Weeks 11–13</span>
+      <span style="font-size:14px; font-weight:500; color:var(--color-text-primary);">AI assistant</span>
+    </div>
+    <div style="display:grid; gap:6px;">
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">AI chat screen — conversation history saved to Supabase</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Verse finder — ask AI to find passages by topic or theme</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Study assistant — ask questions about any passage you're reading</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#854F0B;">★</span><span style="color:var(--color-text-primary);">Free tier — 3 AI queries per day, tracked via ai_usage table</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#854F0B;">★</span><span style="color:var(--color-text-primary);">Paid tier — unlimited queries + discussion starters + devotional generator</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#854F0B;">★</span><span style="color:var(--color-text-primary);">Upgrade prompt shown naturally when free query limit is hit</span></div>
+    </div>
+  </div>
+
+  <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <span style="background:#FAEEDA; color:#633806; font-size:12px; font-weight:500; padding:3px 10px; border-radius:20px;">Phase 5 — Weeks 14–15</span>
+      <span style="font-size:14px; font-weight:500; color:var(--color-text-primary);">Freemium layer</span>
+    </div>
+    <div style="display:grid; gap:6px;">
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#854F0B;">★</span><span style="color:var(--color-text-primary);">RevenueCat — monthly ($4.99) + annual ($29.99) plans</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#854F0B;">★</span><span style="color:var(--color-text-primary);">Private group creation gated behind paid plan</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#854F0B;">★</span><span style="color:var(--color-text-primary);">Share annotations to community — paid feature</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#854F0B;">★</span><span style="color:var(--color-text-primary);">Unlimited AI queries — paid feature</span></div>
+    </div>
+  </div>
+
+  <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <span style="background:#E1F5EE; color:#085041; font-size:12px; font-weight:500; padding:3px 10px; border-radius:20px;">Phase 6 — Weeks 16–20</span>
+      <span style="font-size:14px; font-weight:500; color:var(--color-text-primary);">Polish & launch</span>
+    </div>
+    <div style="display:grid; gap:6px;">
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Push notifications — new replies + AI response ready</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">User profile — avatar, denomination, reading activity</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">Beta test with your church group — real feedback</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:#0F6E56;">✓</span><span style="color:var(--color-text-primary);">App Store + Google Play submission</span></div>
+    </div>
+  </div>
+
+  <div style="border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <span style="background:var(--color-background-secondary); color:var(--color-text-secondary); font-size:12px; font-weight:500; padding:3px 10px; border-radius:20px;">Post-launch (v2)</span>
+      <span style="font-size:14px; font-weight:500; color:var(--color-text-secondary);">Save these for later</span>
+    </div>
+    <div style="display:grid; gap:6px;">
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:var(--color-text-tertiary);">–</span><span style="color:var(--color-text-secondary);">Reading plans with group progress tracking</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:var(--color-text-tertiary);">–</span><span style="color:var(--color-text-secondary);">Cross-reference commentaries (Matthew Henry etc.)</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:var(--color-text-tertiary);">–</span><span style="color:var(--color-text-secondary);">Audio Bible playback</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:var(--color-text-tertiary);">–</span><span style="color:var(--color-text-secondary);">Church admin dashboard (web)</span></div>
+      <div style="display:flex; gap:10px; font-size:13px;"><span style="color:var(--color-text-tertiary);">–</span><span style="color:var(--color-text-secondary);">AI-powered sermon study mode</span></div>
+    </div>
+  </div>
+
+</div>

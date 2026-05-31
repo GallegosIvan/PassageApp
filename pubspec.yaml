@@ -13,6 +13,10 @@ dependencies:
   # Supabase - database, auth, realtime
   supabase_flutter: ^2.3.0
 
+  flutter_dotenv: ^5.1.0
+
+  http: ^1.2.0
+
   # Navigation
   go_router: ^13.0.0
 
@@ -26,12 +30,24 @@ dependencies:
   # Icons
   cupertino_icons: ^1.0.6
 
+  shared_preferences: ^2.2.3
+
+  # QR code generation
+  qr_flutter: ^4.1.0
+
+  flutter_markdown: ^0.7.7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
   build_runner: ^2.4.8
   riverpod_generator: ^2.3.9
+  integration_test:
+    sdk: flutter
 
 flutter:
   uses-material-design: true
+
+  assets: 
+      - .env
