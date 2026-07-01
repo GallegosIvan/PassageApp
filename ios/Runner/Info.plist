@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Passage needs camera access so you can scan a church's QR code to join.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Passage needs microphone access for voice input to the Bible AI.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Passage uses speech recognition so you can talk to the Bible AI instead of typing.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

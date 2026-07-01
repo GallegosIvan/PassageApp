@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../services/community_service.dart';
-import '../../services/bible_interaction_service.dart';
-
+import '../../services/subscription_service.dart';
+import '../../widgets/upgrade_sheet.dart';
 
 class CreateCommunityScreen extends StatefulWidget {
-  const CreateCommunityScreen({super.key});
+  final String? churchId; // if set, creates a church-only community
+
+  const CreateCommunityScreen({super.key, this.churchId});
 
   @override
   State<CreateCommunityScreen> createState() => _CreateCommunityScreenState();
@@ -12,91 +14,37 @@ class CreateCommunityScreen extends StatefulWidget {
 
 class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
   final _communityService = CommunityService();
+  final _subscriptionService = SubscriptionService();
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _interactionService = BibleInteractionService();
 
   String? _selectedBook;
-  int? _selectedChapter;
   bool _isPrivate = false;
+  bool _isBibleStudy = false; // church-only toggle
   bool _isLoading = false;
 
-  // Full list of Bible books with chapter counts
-  final List<Map<String, dynamic>> _books = [
-    {'name': 'Genesis', 'chapters': 50},
-    {'name': 'Exodus', 'chapters': 40},
-    {'name': 'Leviticus', 'chapters': 27},
-    {'name': 'Numbers', 'chapters': 36},
-    {'name': 'Deuteronomy', 'chapters': 34},
-    {'name': 'Joshua', 'chapters': 24},
-    {'name': 'Judges', 'chapters': 21},
-    {'name': 'Ruth', 'chapters': 4},
-    {'name': '1 Samuel', 'chapters': 31},
-    {'name': '2 Samuel', 'chapters': 24},
-    {'name': '1 Kings', 'chapters': 22},
-    {'name': '2 Kings', 'chapters': 25},
-    {'name': '1 Chronicles', 'chapters': 29},
-    {'name': '2 Chronicles', 'chapters': 36},
-    {'name': 'Ezra', 'chapters': 10},
-    {'name': 'Nehemiah', 'chapters': 13},
-    {'name': 'Esther', 'chapters': 10},
-    {'name': 'Job', 'chapters': 42},
-    {'name': 'Psalms', 'chapters': 150},
-    {'name': 'Proverbs', 'chapters': 31},
-    {'name': 'Ecclesiastes', 'chapters': 12},
-    {'name': 'Song of Solomon', 'chapters': 8},
-    {'name': 'Isaiah', 'chapters': 66},
-    {'name': 'Jeremiah', 'chapters': 52},
-    {'name': 'Lamentations', 'chapters': 5},
-    {'name': 'Ezekiel', 'chapters': 48},
-    {'name': 'Daniel', 'chapters': 12},
-    {'name': 'Hosea', 'chapters': 14},
-    {'name': 'Joel', 'chapters': 3},
-    {'name': 'Amos', 'chapters': 9},
-    {'name': 'Obadiah', 'chapters': 1},
-    {'name': 'Jonah', 'chapters': 4},
-    {'name': 'Micah', 'chapters': 7},
-    {'name': 'Nahum', 'chapters': 3},
-    {'name': 'Habakkuk', 'chapters': 3},
-    {'name': 'Zephaniah', 'chapters': 3},
-    {'name': 'Haggai', 'chapters': 2},
-    {'name': 'Zechariah', 'chapters': 14},
-    {'name': 'Malachi', 'chapters': 4},
-    {'name': 'Matthew', 'chapters': 28},
-    {'name': 'Mark', 'chapters': 16},
-    {'name': 'Luke', 'chapters': 24},
-    {'name': 'John', 'chapters': 21},
-    {'name': 'Acts', 'chapters': 28},
-    {'name': 'Romans', 'chapters': 16},
-    {'name': '1 Corinthians', 'chapters': 16},
-    {'name': '2 Corinthians', 'chapters': 13},
-    {'name': 'Galatians', 'chapters': 6},
-    {'name': 'Ephesians', 'chapters': 6},
-    {'name': 'Philippians', 'chapters': 4},
-    {'name': 'Colossians', 'chapters': 4},
-    {'name': '1 Thessalonians', 'chapters': 5},
-    {'name': '2 Thessalonians', 'chapters': 3},
-    {'name': '1 Timothy', 'chapters': 6},
-    {'name': '2 Timothy', 'chapters': 4},
-    {'name': 'Titus', 'chapters': 3},
-    {'name': 'Philemon', 'chapters': 1},
-    {'name': 'Hebrews', 'chapters': 13},
-    {'name': 'James', 'chapters': 5},
-    {'name': '1 Peter', 'chapters': 5},
-    {'name': '2 Peter', 'chapters': 3},
-    {'name': '1 John', 'chapters': 5},
-    {'name': '2 John', 'chapters': 1},
-    {'name': '3 John', 'chapters': 1},
-    {'name': 'Jude', 'chapters': 1},
-    {'name': 'Revelation', 'chapters': 22},
-  ];
+  bool get _isChurchCommunity => widget.churchId != null;
 
-  int _chapterCount() {
-    if (_selectedBook == null) return 0;
-    return _books.firstWhere(
-        (b) => b['name'] == _selectedBook)['chapters'] as int;
-  }
+  // Book is required for: every non-church community, and for
+  // church communities explicitly marked as Bible study.
+  bool get _bookRequired => !_isChurchCommunity || _isBibleStudy;
+
+  final List<String> _books = [
+    'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy',
+    'Joshua', 'Judges', 'Ruth', '1 Samuel', '2 Samuel', '1 Kings',
+    '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra', 'Nehemiah',
+    'Esther', 'Job', 'Psalms', 'Proverbs', 'Ecclesiastes',
+    'Song of Solomon', 'Isaiah', 'Jeremiah', 'Lamentations', 'Ezekiel',
+    'Daniel', 'Hosea', 'Joel', 'Amos', 'Obadiah', 'Jonah', 'Micah',
+    'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi',
+    'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans',
+    '1 Corinthians', '2 Corinthians', 'Galatians', 'Ephesians',
+    'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians',
+    '1 Timothy', '2 Timothy', 'Titus', 'Philemon', 'Hebrews', 'James',
+    '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude',
+    'Revelation',
+  ];
 
   @override
   void dispose() {
@@ -106,22 +54,12 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
   }
 
   Future<void> _create() async {
-    // VALIDATION: check all fields
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedBook == null) {
+
+    if (_bookRequired && _selectedBook == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select a book'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-    if (_selectedChapter == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a chapter'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -132,19 +70,19 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // API CALL: CommunityService.createCommunity → Supabase DB
       await _communityService.createCommunity(
         name: _nameController.text.trim(),
-        book: _selectedBook!,
-        chapter: _selectedChapter!,
+        book: _selectedBook,
         description: _descriptionController.text.trim().isEmpty
             ? null
             : _descriptionController.text.trim(),
         isPrivate: _isPrivate,
+        churchId: widget.churchId,
+        isBibleStudy: _isChurchCommunity ? _isBibleStudy : false,
       );
 
       if (mounted) {
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Community created!'),
@@ -154,16 +92,67 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to create community: $e'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        final message = e.toString();
+        if (message.contains('private_limit_reached')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'You\'ve reached the limit of 5 private communities on the Pro plan.'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else if (message.contains('paid_required')) {
+          setState(() => _isLoading = false);
+          await UpgradeSheet.show(context);
+          return;
+        } else if (message.contains('book_required')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please select a book'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to create community: $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _onPrivateToggled(bool val) async {
+    // Church sub-groups: privacy is free, no paywall — just a
+    // restriction on who can join (QR scan or admin-add only).
+    if (_isChurchCommunity) {
+      setState(() => _isPrivate = val);
+      return;
+    }
+
+    // Non-church communities: privacy is a Pro-gated feature,
+    // same as before.
+    if (val) {
+      final isPro = await _subscriptionService.isPro();
+      if (isPro) {
+        setState(() => _isPrivate = true);
+      } else {
+        if (mounted) {
+          final upgraded = await UpgradeSheet.show(context);
+          if (upgraded == true && mounted) {
+            setState(() => _isPrivate = true);
+          }
+        }
+      }
+    } else {
+      setState(() => _isPrivate = false);
     }
   }
 
@@ -173,9 +162,11 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: const Text('Create Community',
-            style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(
+          _isChurchCommunity ? 'Create Church Community' : 'Create Community',
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
@@ -185,14 +176,42 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── CHURCH COMMUNITY NOTICE ───────────────────
+              if (_isChurchCommunity) ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.church_outlined,
+                          color: Colors.grey, size: 18),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'This community will only be visible to members of your church — it won\'t appear in Discover. It\'s free and doesn\'t count toward your private community limit.',
+                          style:
+                              TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+
               // ── NAME ──────────────────────────────────────
-              _buildLabel('Community Name'),
+              _buildLabel('Community Name', required: true),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _nameController,
                 style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration('e.g. John 3 Study Group'),
-                // VALIDATION: must not be empty
+                decoration: _inputDecoration(_isChurchCommunity
+                    ? 'e.g. Youth Group or John 3 Study'
+                    : 'e.g. John 3 Study Group'),
                 validator: (val) => val == null || val.trim().isEmpty
                     ? 'Please enter a name'
                     : null,
@@ -201,91 +220,99 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
               const SizedBox(height: 20),
 
               // ── DESCRIPTION ───────────────────────────────
-              _buildLabel('Description (optional)'),
+              _buildLabel('Description', required: false),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _descriptionController,
                 style: const TextStyle(color: Colors.white),
                 maxLines: 3,
-                decoration: _inputDecoration(
-                    'What is this community about?'),
+                decoration:
+                    _inputDecoration('What is this community about?'),
               ),
 
               const SizedBox(height: 20),
 
-              // ── BOOK PICKER ───────────────────────────────
-              _buildLabel('Book'),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedBook,
-                    hint: const Text('Select a book',
-                        style: TextStyle(color: Colors.grey)),
-                    dropdownColor: const Color(0xFF1A1A1A),
-                    isExpanded: true,
-                    style: const TextStyle(color: Colors.white),
-                    items: _books
-                        .map((b) => DropdownMenuItem<String>(
-                              value: b['name'] as String,
-                              child: Text(b['name'] as String),
-                            ))
-                        .toList(),
-                    onChanged: (val) => setState(() {
-                      _selectedBook = val;
-                      _selectedChapter = null;
-                    }),
+              // ── BIBLE STUDY TOGGLE (church communities only) ──
+              if (_isChurchCommunity) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.menu_book_outlined,
+                          color: Colors.grey, size: 20),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('This is a Bible study community',
+                                style: TextStyle(
+                                    color: Colors.white, fontWeight: FontWeight.w500)),
+                            Text('Turn on if this group studies a specific book of the Bible',
+                                style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _isBibleStudy,
+                        onChanged: (val) => setState(() {
+                          _isBibleStudy = val;
+                          if (!val) _selectedBook = null;
+                        }),
+                        activeColor: Colors.white,
+                      ),
+                    ],
                   ),
                 ),
-              ),
+                const SizedBox(height: 20),
+              ],
 
-              const SizedBox(height: 20),
-
-              // ── CHAPTER PICKER ────────────────────────────
-              _buildLabel('Chapter'),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: _selectedChapter,
-                    hint: Text(
-                      _selectedBook == null
-                          ? 'Select a book first'
-                          : 'Select a chapter',
-                      style: const TextStyle(color: Colors.grey),
+              // ── BOOK PICKER (only when required) ──────────
+              if (_bookRequired) ...[
+                _buildLabel('Book', required: true),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedBook,
+                      hint: const Text('Select a book',
+                          style: TextStyle(color: Colors.grey)),
+                      dropdownColor: const Color(0xFF1A1A1A),
+                      isExpanded: true,
+                      style: const TextStyle(color: Colors.white),
+                      items: _books
+                          .map((b) => DropdownMenuItem<String>(
+                                value: b,
+                                child: Text(b),
+                              ))
+                          .toList(),
+                      onChanged: (val) => setState(() => _selectedBook = val),
                     ),
-                    dropdownColor: const Color(0xFF1A1A1A),
-                    isExpanded: true,
-                    style: const TextStyle(color: Colors.white),
-                    items: _selectedBook == null
-                        ? []
-                        : List.generate(
-                            _chapterCount(),
-                            (i) => DropdownMenuItem<int>(
-                              value: i + 1,
-                              child: Text('Chapter ${i + 1}'),
-                            ),
-                          ),
-                    onChanged: _selectedBook == null
-                        ? null
-                        : (val) => setState(() => _selectedChapter = val),
                   ),
                 ),
-              ),
+                const SizedBox(height: 4),
+                Text(
+                  _isChurchCommunity
+                      ? 'Members will reference a specific chapter when posting'
+                      : 'Members will reference a specific chapter when posting — no need to make a new community per chapter',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                const SizedBox(height: 20),
+              ],
 
-              const SizedBox(height: 20),
-
-              // ── PRIVATE TOGGLE ────────────────────────────
+              // ── PRIVATE TOGGLE ─────────────────────────────
+              // For church communities: free sub-group restriction
+              // (QR scan or admin-add to join). For non-church
+              // communities: Pro-gated paywall feature, unchanged.
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -297,66 +324,34 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
                     const Icon(Icons.lock_outline,
                         color: Colors.grey, size: 20),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Private community',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500)),
-                          Text('Only invited members can join',
-                              style: TextStyle(
-                                  color: Colors.grey, fontSize: 12)),
+                          Text(
+                            _isChurchCommunity ? 'Restrict this group' : 'Private community',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500),
+                          ),
+                          Text(
+                            _isChurchCommunity
+                                ? 'Only people who scan a QR code or are added by an admin can join'
+                                : 'Only invited members can join — Pro feature',
+                            style: const TextStyle(
+                                color: Colors.grey, fontSize: 12),
+                          ),
                         ],
                       ),
                     ),
                     Switch(
                       value: _isPrivate,
-                      onChanged: (val) async {
-                        if (val) {
-                          final isPaid = await _interactionService.isPaidUser();
-                          if (isPaid) {
-                            setState(() => _isPrivate = true);
-                          } else {
-                            showDialog(
-                              context: context,
-                              builder: (_) => AlertDialog(
-                                backgroundColor: const Color(0xFF1A1A1A),
-                                title: const Text('Upgrade to Pro',
-                                    style: TextStyle(color: Colors.white)),
-                                content: const Text(
-                                  'Private communities are a Pro feature. Upgrade to create private groups for your church or study group.',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: const Text('Maybe later',
-                                        style: TextStyle(color: Colors.grey)),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white,
-                                      foregroundColor: Colors.black,
-                                    ),
-                                    child: const Text('Upgrade'),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                        } else {
-                          setState(() => _isPrivate = false);
-                        }
-                      },
+                      onChanged: _onPrivateToggled,
                       activeColor: Colors.white,
                     ),
                   ],
                 ),
               ),
-
               const SizedBox(height: 36),
 
               // ── CREATE BUTTON ─────────────────────────────
@@ -390,13 +385,23 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
     );
   }
 
-  Widget _buildLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w500),
+  Widget _buildLabel(String text, {required bool required}) {
+    return RichText(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500),
+        children: required
+            ? const [
+                TextSpan(
+                  text: ' *',
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                ),
+              ]
+            : null,
+      ),
     );
   }
 
@@ -412,8 +417,7 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide:
-            const BorderSide(color: Colors.white, width: 1),
+        borderSide: const BorderSide(color: Colors.white, width: 1),
       ),
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 16, vertical: 16),

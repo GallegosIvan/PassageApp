@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
-import 'login_screen.dart';
+import 'landing_screen.dart';
 
 // ============================================================
 // SIGN UP SCREEN
@@ -53,6 +53,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
         displayName: _displayNameController.text.trim(),
       );
 
+      // Only record terms server-side if we have a live session
+      // (email verification disabled). With verification on,
+      // there's no session here yet — login_screen.dart handles
+      // the terms check after they verify and log in.
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        try {
+          await Supabase.instance.client.rpc('accept_terms');
+        } catch (e) {
+          print('accept_terms after signup error: $e');
+        }
+      }
+
       if (mounted) {
         _showSnackbar(
           'Account created! Please check your email to verify.',
@@ -92,6 +105,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const LandingScreen()),
+            );
+          },
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
@@ -100,24 +126,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 20),
+                const SizedBox(height: 0),
 
                 // ── LOGO + TITLE ──────────────────────────
                 Center(
                   child: Column(
                     children: [
                       Container(
-                        width: 64,
-                        height: 64,
-                        // decoration: BoxDecoration(
-                        //   color: Colors.white,
-                        //   borderRadius: BorderRadius.circular(16),
-                        // ),
-                        child: const Icon(
-                          Icons.menu_book_rounded,
-                          color: Colors.white,
-                          size: 32,
-                        ),
+                        child: Image.asset('assets/icon/icon.png', width: 120, height: 120),
                       ),
                       const SizedBox(height: 16),
                       const Text(
@@ -159,7 +175,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 _buildTextField(
                   controller: _displayNameController,
                   hint: 'e.g. John Smith',
-                  // VALIDATION: must not be empty
                   validator: (val) {
                     if (val == null || val.trim().isEmpty) {
                       return 'Please enter a display name';
@@ -181,7 +196,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 _buildTextField(
                   controller: _usernameController,
                   hint: 'e.g. Smith123',
-                  // VALIDATION: no empty, no spaces, min 3 chars, letters/numbers/underscores only
                   validator: (val) {
                     if (val == null || val.trim().isEmpty) {
                       return 'Please enter a username';
@@ -214,7 +228,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   controller: _emailController,
                   hint: 'you@example.com',
                   keyboardType: TextInputType.emailAddress,
-                  // VALIDATION: must not be empty, must contain @ and .
                   validator: (val) {
                     if (val == null || val.trim().isEmpty) {
                       return 'Please enter your email';
@@ -245,7 +258,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
                   ),
-                  // VALIDATION: must not be empty, min 6 chars
                   validator: (val) {
                     if (val == null || val.isEmpty) {
                       return 'Please enter a password';
@@ -293,32 +305,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
 
                 const SizedBox(height: 24),
-
-                // ── NAVIGATE TO LOGIN ─────────────────────
-                Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'Already have an account? ',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(
-                              builder: (_) => const LoginScreen()),
-                        ),
-                        child: const Text(
-                          'Log in',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
@@ -327,7 +313,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // ── REUSABLE LABEL WIDGET ─────────────────────────────────
   Widget _buildLabel(String text) {
     return Text(
       text,
@@ -339,7 +324,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // ── REUSABLE TEXT FIELD WIDGET ────────────────────────────
   Widget _buildTextField({
     required TextEditingController controller,
     required String hint,

@@ -46,7 +46,6 @@ app.*.map.json
 
 # Secrets & API keys
 google-services.json
-GoogleService-Info.plist
 *.env.local
 
 # Android signing

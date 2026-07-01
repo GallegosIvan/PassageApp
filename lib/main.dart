@@ -2,24 +2,43 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/splash_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-
+import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:flutter/foundation.dart';
+import 'services/subscription_service.dart';
 
 // ============================================================
 // MAIN.DART
-// Initializes Supabase and decides which screen to show
-// based on whether the user is already logged in.
+// Initializes Supabase and RevenueCat, then launches the app.
+// All API keys are loaded from .env — never hardcoded.
 // ============================================================
+
+Future<void> initializeRevenueCat() async {
+  if (kIsWeb) return;
+  final apiKey = dotenv.get('REVENUECAT_API_KEY');
+  await Purchases.configure(PurchasesConfiguration(apiKey));
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await dotenv.load(fileName: ".env");
 
-  // API CALL: Supabase.initialize — connects app to your Supabase project
   await Supabase.initialize(
     url: dotenv.get('SUPABASE_URL'),
     anonKey: dotenv.get('SUPABASE_ANON_KEY'),
   );
+
+  await initializeRevenueCat();
+
+  // Sync subscription status on launch so Supabase reflects
+  // the current RevenueCat state (handles renewals, cancellations)
+  if (!kIsWeb) {
+    try {
+      await SubscriptionService().syncSubscription();
+    } catch (e) {
+      print('syncSubscription on launch error: $e');
+    }
+  }
 
   runApp(const PassageApp());
 }
@@ -47,21 +66,30 @@ class PassageApp extends StatelessWidget {
           backgroundColor: Colors.transparent,
           elevation: 0,
           iconTheme: IconThemeData(color: Colors.white),
-          titleTextStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          titleTextStyle: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 20),
         ),
-        textTheme: ThemeData.dark().textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+        textTheme: ThemeData.dark()
+            .textTheme
+            .apply(bodyColor: Colors.white, displayColor: Colors.white),
         iconTheme: const IconThemeData(color: Colors.white),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ButtonStyle(
             foregroundColor: MaterialStatePropertyAll(Colors.white),
             backgroundColor: MaterialStateProperty.resolveWith((states) =>
-                states.contains(MaterialState.disabled) ? Colors.grey : Colors.white24),
+                states.contains(MaterialState.disabled)
+                    ? Colors.grey
+                    : Colors.white24),
           ),
         ),
         textButtonTheme: TextButtonThemeData(
           style: ButtonStyle(
             foregroundColor: MaterialStateProperty.resolveWith((states) =>
-                states.contains(MaterialState.disabled) ? Colors.grey : Colors.white),
+                states.contains(MaterialState.disabled)
+                    ? Colors.grey
+                    : Colors.white),
           ),
         ),
         inputDecorationTheme: const InputDecorationTheme(
@@ -70,18 +98,7 @@ class PassageApp extends StatelessWidget {
           hintStyle: TextStyle(color: Colors.white),
         ),
       ),
-      // AuthGate decides whether to show login or home
       home: const SplashScreen(),
     );
   }
 }
-
-// ============================================================
-// AUTH GATE
-// Listens to Supabase auth state stream.
-// Shows HomeScreen if logged in, SignUpScreen if not.
-// This means if a user is already logged in when they open
-// the app, they skip straight to home without logging in again.
-// ============================================================
-
-

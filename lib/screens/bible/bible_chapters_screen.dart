@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/bible_service.dart';
 import '../../services/bible_interaction_service.dart';
 import 'bible_reader_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class BibleChaptersScreen extends StatefulWidget {
   final String translationId;
@@ -19,17 +20,42 @@ class BibleChaptersScreen extends StatefulWidget {
 
 class _BibleChaptersScreenState extends State<BibleChaptersScreen> {
   final _interactionService = BibleInteractionService();
+  final _client = Supabase.instance.client;
+
   List<Map<String, dynamic>> _bookmarks = [];
+  Set<int> _readChapters = {};
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _loadBookmark();
+    _loadData();
   }
 
-  Future<void> _loadBookmark() async {
+  Future<void> _loadData() async {
     final bookmarks = await _interactionService.getBookmarks();
-    if (mounted) setState(() => _bookmarks = bookmarks);
+    final readChapters = await _loadReadChapters();
+    if (mounted) {
+      setState(() {
+        _bookmarks = bookmarks;
+        _readChapters = readChapters;
+      });
+    }
+  }
+
+  Future<Set<int>> _loadReadChapters() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return {};
+    try {
+      final response = await _client
+          .from('reading_history')
+          .select('chapter')
+          .eq('user_id', userId)
+          .eq('book_id', widget.book['id'] as String);
+      return (response as List).map((r) => r['chapter'] as int).toSet();
+    } catch (e) {
+      print('loadReadChapters error: $e');
+      return {};
+    }
   }
 
   @override
@@ -39,17 +65,28 @@ class _BibleChaptersScreenState extends State<BibleChaptersScreen> {
     final bookName = widget.book['name'] ?? '';
     final bookId = widget.book['id'] as String;
     final bookmarkedChapters = _bookmarks
-      .where((b) => b['book_id'] == bookId)
-      .map((b) => b['chapter'] as int)
-      .toList();
+        .where((b) => b['book_id'] == bookId)
+        .map((b) => b['chapter'] as int)
+        .toList();
+
+    final allRead = chapters.isNotEmpty &&
+        chapters.every((c) => _readChapters.contains(c));
 
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: Text(bookName,
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Text(bookName,
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            if (allRead) ...[
+              const SizedBox(width: 8),
+              const Icon(Icons.check_circle, color: Colors.green, size: 18),
+            ],
+          ],
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: GridView.builder(
@@ -64,15 +101,20 @@ class _BibleChaptersScreenState extends State<BibleChaptersScreen> {
         itemBuilder: (context, index) {
           final chapterNumber = chapters[index];
           final isBookmarked = bookmarkedChapters.contains(chapterNumber);
+          final isRead = _readChapters.contains(chapterNumber);
+
+          final colorMap = {
+            'purple': Colors.white,
+            'blue': Colors.blue,
+            'green': Colors.green,
+          };
+
           final bookmarkColor = isBookmarked
               ? (() {
-                  final colorMap = {
-                    'purple': Colors.white,
-                    'blue': Colors.blue,
-                    'green': Colors.green,
-                  };
                   final bm = _bookmarks.firstWhere(
-                    (b) => b['book_id'] == bookId && b['chapter'] == chapterNumber,
+                    (b) =>
+                        b['book_id'] == bookId &&
+                        b['chapter'] == chapterNumber,
                     orElse: () => {'color': 'purple'},
                   );
                   return colorMap[bm['color']] ?? Colors.white;
@@ -92,8 +134,7 @@ class _BibleChaptersScreenState extends State<BibleChaptersScreen> {
                   ),
                 ),
               );
-              // Reload bookmark when returning from reader
-              _loadBookmark();
+              _loadData();
             },
             child: Container(
               decoration: BoxDecoration(
@@ -104,13 +145,33 @@ class _BibleChaptersScreenState extends State<BibleChaptersScreen> {
                     : null,
               ),
               alignment: Alignment.center,
-              child: Text(
-                '$chapterNumber',
-                style: TextStyle(
-                  color: isBookmarked ? bookmarkColor! : Colors.white,
-                  fontSize: 16,
-                  fontWeight: isBookmarked ? FontWeight.bold : FontWeight.w500,
-                ),
+              child: Stack(
+                children: [
+                  // Chapter number — centered
+                  Center(
+                    child: Text(
+                      '$chapterNumber',
+                      style: TextStyle(
+                        color: isBookmarked ? bookmarkColor! : Colors.white,
+                        fontSize: 16,
+                        fontWeight: isBookmarked
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  // Green checkmark in bottom-right corner if read
+                  if (isRead)
+                    const Positioned(
+                      bottom: 4,
+                      right: 4,
+                      child: Icon(
+                        Icons.check,
+                        size: 11,
+                        color: Colors.green,
+                      ),
+                    ),
+                ],
               ),
             ),
           );

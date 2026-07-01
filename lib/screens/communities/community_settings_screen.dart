@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/community_service.dart';
-import '../../services/bible_interaction_service.dart';
+import '../../services/subscription_service.dart';
+import '../../widgets/upgrade_sheet.dart';
+
+// SECURITY FIX: _loadAllMembers previously used `users(display_name,
+// username)` relational embedding, which relied on the users
+// table's RLS SELECT policy — found to be `qual = true`, meaning
+// any authenticated user could read any other user's full row,
+// including email, strikes, is_restricted. That policy is now
+// tightened to self-only. _loadAllMembers now fetches only
+// public-safe fields via the get_public_profiles RPC instead,
+// attached in the same 'users' key shape the old embed produced.
 
 class CommunitySettingsScreen extends StatefulWidget {
   final Map<String, dynamic> community;
@@ -21,19 +31,27 @@ class CommunitySettingsScreen extends StatefulWidget {
 class _CommunitySettingsScreenState
     extends State<CommunitySettingsScreen> {
   final _communityService = CommunityService();
-  final _interactionService = BibleInteractionService();
+  final _client = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
-  final _coAdminController = TextEditingController();
+  final _addMemberController = TextEditingController();
+
+  // Church communities don't always need a book — only required
+  // if the community is marked as a Bible study. Non-church
+  // communities always require a book. Chapter is no longer a
+  // community-level field at all (it lives on individual posts).
+  bool get _isChurchCommunity => widget.community['church_id'] != null;
+  bool get _isBibleStudy => widget.community['is_bible_study'] == true;
+  bool get _bookRequired => !_isChurchCommunity || _isBibleStudy;
 
   String? _selectedBook;
-  int? _selectedChapter;
   bool _isPrivate = false;
   bool _isLoading = false;
   bool _isSaving = false;
-  List<Map<String, dynamic>> _members = [];
+  List<Map<String, dynamic>> _allMembers = [];
+  bool _isLoadingMembers = false;
 
   final List<String> _books = [
     'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy',
@@ -51,26 +69,6 @@ class _CommunitySettingsScreenState
     'Revelation',
   ];
 
-  final Map<String, int> _chapterCounts = {
-    'Genesis': 50, 'Exodus': 40, 'Leviticus': 27, 'Numbers': 36,
-    'Deuteronomy': 34, 'Joshua': 24, 'Judges': 21, 'Ruth': 4,
-    '1 Samuel': 31, '2 Samuel': 24, '1 Kings': 22, '2 Kings': 25,
-    '1 Chronicles': 29, '2 Chronicles': 36, 'Ezra': 10, 'Nehemiah': 13,
-    'Esther': 10, 'Job': 42, 'Psalms': 150, 'Proverbs': 31,
-    'Ecclesiastes': 12, 'Song of Solomon': 8, 'Isaiah': 66,
-    'Jeremiah': 52, 'Lamentations': 5, 'Ezekiel': 48, 'Daniel': 12,
-    'Hosea': 14, 'Joel': 3, 'Amos': 9, 'Obadiah': 1, 'Jonah': 4,
-    'Micah': 7, 'Nahum': 3, 'Habakkuk': 3, 'Zephaniah': 3,
-    'Haggai': 2, 'Zechariah': 14, 'Malachi': 4, 'Matthew': 28,
-    'Mark': 16, 'Luke': 24, 'John': 21, 'Acts': 28, 'Romans': 16,
-    '1 Corinthians': 16, '2 Corinthians': 13, 'Galatians': 6,
-    'Ephesians': 6, 'Philippians': 4, 'Colossians': 4,
-    '1 Thessalonians': 5, '2 Thessalonians': 3, '1 Timothy': 6,
-    '2 Timothy': 4, 'Titus': 3, 'Philemon': 1, 'Hebrews': 13,
-    'James': 5, '1 Peter': 5, '2 Peter': 3, '1 John': 5,
-    '2 John': 1, '3 John': 1, 'Jude': 1, 'Revelation': 22,
-  };
-
   @override
   void initState() {
     super.initState();
@@ -79,44 +77,356 @@ class _CommunitySettingsScreenState
     _descriptionController =
         TextEditingController(text: widget.community['description'] ?? '');
     _selectedBook = widget.community['book'];
-    _selectedChapter = widget.community['chapter'];
     _isPrivate = widget.community['is_private'] ?? false;
-    _loadMembers();
+    _loadAllMembers();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
-    _coAdminController.dispose();
+    _addMemberController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadMembers() async {
-    setState(() => _isLoading = true);
-    final members = await _communityService
-        .getCommunityMembers(widget.community['id']);
-    if (mounted) setState(() {
-      _members = members;
-      _isLoading = false;
-    });
+  // ── LOAD ALL MEMBERS (for the full roster list) ───────────
+  // SECURITY FIX: see file header — switched from the users(...)
+  // relational embed to fetching display info via the
+  // get_public_profiles RPC.
+  Future<void> _loadAllMembers() async {
+    setState(() => _isLoadingMembers = true);
+    try {
+      final response = await Supabase.instance.client
+          .from('community_members')
+          .select('id, user_id, role, joined_at')
+          .eq('community_id', widget.community['id'])
+          .order('joined_at', ascending: true);
+
+      final members = List<Map<String, dynamic>>.from(response);
+      await _hydrateUsers(members, 'user_id');
+
+      if (mounted) {
+        setState(() {
+          _allMembers = members;
+          _isLoadingMembers = false;
+        });
+      }
+    } catch (e) {
+      print('loadAllMembers error: $e');
+      if (mounted) setState(() => _isLoadingMembers = false);
+    }
+  }
+
+  // ── HYDRATE USER DISPLAY INFO ──────────────────────────────
+  // Fetches ONLY public-safe display fields (username,
+  // display_name, avatar_url — never email/strikes/is_restricted)
+  // via the get_public_profiles RPC, then attaches a 'users' key
+  // to each row in the same shape the old `users(...)` embed
+  // produced, so existing UI code in this file keeps reading
+  // member['users']['display_name'] etc. unchanged.
+  Future<void> _hydrateUsers(List<Map<String, dynamic>> rows, String idField) async {
+    final ids = rows
+        .map((r) => r[idField] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+    if (ids.isEmpty) return;
+
+    try {
+      final profiles = await _client.rpc('get_public_profiles', params: {'p_user_ids': ids});
+      final profileMap = {
+        for (final p in List<Map<String, dynamic>>.from(profiles)) p['id'] as String: p
+      };
+      for (final row in rows) {
+        final id = row[idField] as String?;
+        row['users'] = id != null ? profileMap[id] : null;
+      }
+    } catch (e) {
+      print('_hydrateUsers error: $e');
+    }
+  }
+
+  // ── REMOVE MEMBER FROM COMMUNITY ──────────────────────────
+  // RPC-backed via CommunityService.removeCommunityMember — the
+  // server verifies the caller is admin/co-admin and enforces
+  // who a co-admin is allowed to remove. This is real enforcement,
+  // not just hiding the menu item.
+  Future<void> _removeMember(Map<String, dynamic> member) async {
+    final user = member['users'];
+    final displayName = user?['display_name'] ?? user?['username'] ?? 'this member';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text('Remove $displayName?', style: const TextStyle(color: Colors.white)),
+        content: const Text(
+          'They will be removed from this community and will need to rejoin to participate again.',
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _communityService.removeCommunityMember(
+        communityId: widget.community['id'],
+        userId: member['user_id'],
+      );
+      if (mounted) {
+        setState(() => _allMembers.removeWhere((m) => m['id'] == member['id']));
+        _showSnackbar('$displayName removed from community');
+      }
+    } catch (e) {
+      final message = e.toString();
+      String displayMessage;
+      if (message.contains('not_authorized')) {
+        displayMessage = 'You don\'t have permission to remove this member';
+      } else if (message.contains('cannot_remove_creator')) {
+        displayMessage = 'The creator can\'t be removed — transfer ownership first';
+      } else {
+        displayMessage = 'Failed to remove member';
+      }
+      if (mounted) _showSnackbar(displayMessage, isError: true);
+    }
+  }
+
+  // ── PROMOTE TO CO-ADMIN ────────────────────────────────────
+  // RPC-backed via CommunityService.updateCommunityMemberRole —
+  // the server verifies the caller is the admin (creator) and
+  // blocks promoting a permanently restricted (three-strikes) user.
+  Future<void> _promoteToCoAdmin(Map<String, dynamic> member) async {
+    try {
+      await _communityService.updateCommunityMemberRole(
+        communityId: widget.community['id'],
+        userId: member['user_id'],
+        newRole: 'co-admin',
+      );
+      if (mounted) {
+        _showSnackbar('Promoted to co-admin');
+        await _loadAllMembers();
+      }
+    } catch (e) {
+      final message = e.toString();
+      if (message.contains('target_is_restricted')) {
+        if (mounted) await _showRestrictedDialog();
+        return;
+      }
+      final displayMessage = message.contains('not_authorized')
+          ? 'Only the creator can promote members'
+          : 'Failed to promote member';
+      if (mounted) _showSnackbar(displayMessage, isError: true);
+    }
+  }
+
+  // ── RESTRICTED USER DIALOG ──────────────────────────────────
+  Future<void> _showRestrictedDialog() async {
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text('Unable to promote',
+            style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'This user is unable to be promoted due to a violation of our Terms of Service.',
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── DEMOTE TO MEMBER ───────────────────────────────────────
+  // RPC-backed via CommunityService.updateCommunityMemberRole —
+  // the server verifies the caller is the admin (creator).
+  Future<void> _demoteToMember(Map<String, dynamic> member) async {
+    try {
+      await _communityService.updateCommunityMemberRole(
+        communityId: widget.community['id'],
+        userId: member['user_id'],
+        newRole: 'member',
+      );
+      if (mounted) {
+        _showSnackbar('Removed as co-admin');
+        await _loadAllMembers();
+      }
+    } catch (e) {
+      final message = e.toString();
+      final displayMessage = message.contains('not_authorized')
+          ? 'Only the creator can demote co-admins'
+          : 'Failed to update member';
+      if (mounted) _showSnackbar(displayMessage, isError: true);
+    }
+  }
+
+  // ── TRANSFER OWNERSHIP ─────────────────────────────────────
+  Future<void> _transferOwnership(Map<String, dynamic> member) async {
+    final user = member['users'];
+    final displayName = user?['display_name'] ?? user?['username'] ?? 'this member';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text('Transfer ownership to $displayName?',
+            style: const TextStyle(color: Colors.white)),
+        content: Text(
+          '$displayName will become the new creator of this community with full admin rights, including the ability to delete it. You will become a co-admin and lose creator privileges. This cannot be undone by you alone.',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Transfer', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final result = await _communityService.transferCommunityOwnership(
+        communityId: widget.community['id'],
+        newOwnerId: member['user_id'],
+      );
+
+      final downgraded = result['downgraded_to_public'] == true;
+
+      if (mounted) {
+        _showSnackbar(downgraded
+            ? 'Ownership transferred to $displayName. Since they don\'t have Pro, this community was switched to public.'
+            : 'Ownership transferred to $displayName');
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      final message = e.toString();
+      if (message.contains('new_owner_is_restricted')) {
+        if (mounted) await _showRestrictedDialog();
+        return;
+      }
+      String displayMessage;
+      if (message.contains('not_authorized')) {
+        displayMessage = 'Only the creator can transfer ownership';
+      } else if (message.contains('new_owner_not_a_member')) {
+        displayMessage = 'That user must already be a member';
+      } else {
+        displayMessage = 'Failed to transfer ownership';
+      }
+      if (mounted) _showSnackbar(displayMessage, isError: true);
+    }
+  }
+
+  // ── ROLE ACTION MENU ───────────────────────────────────────
+  void _showMemberActions(Map<String, dynamic> member) {
+    final user = member['users'];
+    final displayName = user?['display_name'] ?? user?['username'] ?? 'Unknown';
+    final role = member['role'] as String? ?? 'member';
+    final isCreatorMember = member['user_id'] == widget.community['created_by'];
+
+    if (isCreatorMember) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(displayName,
+                  style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 4),
+            // Promote/demote are admin-only (creator-only) actions —
+            // the RPC enforces this server-side, but we also only show
+            // these options to the creator in the UI to avoid a
+            // confusing "not_authorized" error on tap for a co-admin.
+            if (widget.isCreator && role == 'member')
+              ListTile(
+                leading: const Icon(Icons.shield_outlined, color: Colors.white),
+                title: const Text('Make co-admin', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _promoteToCoAdmin(member);
+                },
+              ),
+            if (widget.isCreator && role == 'co-admin')
+              ListTile(
+                leading: const Icon(Icons.remove_moderator_outlined, color: Colors.orange),
+                title: const Text('Remove as co-admin', style: TextStyle(color: Colors.orange)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _demoteToMember(member);
+                },
+              ),
+            if (widget.isCreator)
+              ListTile(
+                leading: const Icon(Icons.swap_horiz, color: Colors.red),
+                title: const Text('Transfer ownership', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _transferOwnership(member);
+                },
+              ),
+            // Remove from community is available to admin AND co-admin,
+            // but the RPC server-side restricts co-admins to removing
+            // only plain members, not other co-admins.
+            ListTile(
+              leading: const Icon(Icons.person_remove_outlined, color: Colors.grey),
+              title: const Text('Remove from community', style: TextStyle(color: Colors.grey)),
+              onTap: () {
+                Navigator.pop(context);
+                _removeMember(member);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _saveSettings() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedBook == null || _selectedChapter == null) {
-      _showSnackbar('Please select a book and chapter', isError: true);
+    if (_bookRequired && _selectedBook == null) {
+      _showSnackbar('Please select a book', isError: true);
       return;
     }
 
     setState(() => _isSaving = true);
     try {
-      // API CALL: CommunityService.updateCommunity → Supabase DB
       await _communityService.updateCommunity(
         communityId: widget.community['id'],
         name: _nameController.text.trim(),
-        book: _selectedBook!,
-        chapter: _selectedChapter!,
+        book: _selectedBook,
         description: _descriptionController.text.trim().isEmpty
             ? null
             : _descriptionController.text.trim(),
@@ -133,36 +443,32 @@ class _CommunitySettingsScreenState
     }
   }
 
-  Future<void> _addCoAdmin() async {
-    final username = _coAdminController.text.trim();
+  // ── ADD MEMBER TO PRIVATE SUB-GROUP BY USERNAME ────────────
+  Future<void> _addMemberByUsername() async {
+    final username = _addMemberController.text.trim();
     if (username.isEmpty) return;
 
     try {
-      // API CALL: CommunityService.addCoAdmin → Supabase DB
-      await _communityService.addCoAdmin(
+      await _communityService.addMemberToPrivateCommunity(
         communityId: widget.community['id'],
         username: username,
       );
-      _coAdminController.clear();
-      await _loadMembers();
-      if (mounted) _showSnackbar('@$username is now a co-admin');
+      _addMemberController.clear();
+      await _loadAllMembers();
+      if (mounted) _showSnackbar('@$username added to the group');
     } catch (e) {
-      if (mounted) _showSnackbar(e.toString().replaceAll('Exception: ', ''),
-          isError: true);
-    }
-  }
-
-  Future<void> _removeCoAdmin(Map<String, dynamic> member) async {
-    try {
-      // API CALL: CommunityService.removeCoAdmin → Supabase DB
-      await _communityService.removeCoAdmin(
-        communityId: widget.community['id'],
-        memberId: member['id'],
-      );
-      await _loadMembers();
-      if (mounted) _showSnackbar('Co-admin removed');
-    } catch (e) {
-      if (mounted) _showSnackbar('Failed to remove co-admin', isError: true);
+      final message = e.toString();
+      String displayMessage;
+      if (message.contains('not_authorized')) {
+        displayMessage = 'Only admins can add members';
+      } else if (message.contains('user_not_found')) {
+        displayMessage = 'User not found';
+      } else if (message.contains('not_church_member')) {
+        displayMessage = 'That user must follow the church first';
+      } else {
+        displayMessage = 'Failed to add member';
+      }
+      if (mounted) _showSnackbar(displayMessage, isError: true);
     }
   }
 
@@ -195,7 +501,6 @@ class _CommunitySettingsScreenState
     if (confirmed != true) return;
 
     try {
-      // API CALL: CommunityService.deleteCommunity → Supabase DB
       await _communityService.deleteCommunity(widget.community['id']);
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
@@ -219,9 +524,6 @@ class _CommunitySettingsScreenState
   @override
   Widget build(BuildContext context) {
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final coAdmins = _members
-        .where((m) => m['role'] == 'co-admin')
-        .toList();
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -261,7 +563,7 @@ class _CommunitySettingsScreenState
                     _sectionLabel('General'),
                     const SizedBox(height: 12),
 
-                    _buildLabel('Community Name'),
+                    _buildLabel('Community Name', required: true),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _nameController,
@@ -275,7 +577,7 @@ class _CommunitySettingsScreenState
 
                     const SizedBox(height: 16),
 
-                    _buildLabel('Description'),
+                    _buildLabel('Description', required: false),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _descriptionController,
@@ -286,50 +588,53 @@ class _CommunitySettingsScreenState
 
                     const SizedBox(height: 16),
 
-                    _buildLabel('Book'),
-                    const SizedBox(height: 8),
-                    _dropdown<String>(
-                      value: _selectedBook,
-                      hint: 'Select a book',
-                      items: _books
-                          .map((b) => DropdownMenuItem(
-                                value: b,
-                                child: Text(b),
-                              ))
-                          .toList(),
-                      onChanged: (val) => setState(() {
-                        _selectedBook = val;
-                        _selectedChapter = null;
-                      }),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _buildLabel('Chapter'),
-                    const SizedBox(height: 8),
-                    _dropdown<int>(
-                      value: _selectedChapter,
-                      hint: _selectedBook == null
-                          ? 'Select a book first'
-                          : 'Select a chapter',
-                      items: _selectedBook == null
-                          ? []
-                          : List.generate(
-                              _chapterCounts[_selectedBook] ?? 50,
-                              (i) => DropdownMenuItem(
-                                value: i + 1,
-                                child: Text('Chapter ${i + 1}'),
+                    if (_bookRequired) ...[
+                      _buildLabel('Book', required: true),
+                      const SizedBox(height: 8),
+                      _dropdown<String>(
+                        value: _selectedBook,
+                        hint: 'Select a book',
+                        items: _books
+                            .map((b) => DropdownMenuItem(
+                                  value: b,
+                                  child: Text(b),
+                                ))
+                            .toList(),
+                        onChanged: (val) => setState(() => _selectedBook = val),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Members reference a specific chapter when they post',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                      const SizedBox(height: 16),
+                    ] else if (_isChurchCommunity) ...[
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1A1A1A),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.grey, size: 16),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'This is a general church channel, not a Bible study community — no book or chapter required.',
+                                style: TextStyle(color: Colors.grey, fontSize: 12),
                               ),
                             ),
-                      onChanged: _selectedBook == null
-                          ? null
-                          : (val) =>
-                              setState(() => _selectedChapter = val),
-                    ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
-                    const SizedBox(height: 16),
-
-                    // Private toggle
+                    // Private toggle — for church communities this
+                    // restricts the sub-group to QR/admin-add only
+                    // (free). For non-church communities this is
+                    // still the Pro-gated paywall feature.
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -341,57 +646,43 @@ class _CommunitySettingsScreenState
                           const Icon(Icons.lock_outline,
                               color: Colors.grey, size: 20),
                           const SizedBox(width: 12),
-                          const Expanded(
+                          Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Private community',
-                                    style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w500)),
-                                Text('Only invited members can join',
-                                    style: TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 12)),
+                                Text(
+                                  _isChurchCommunity ? 'Restrict this group' : 'Private community',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500),
+                                ),
+                                Text(
+                                  _isChurchCommunity
+                                      ? 'Only people who scan a QR code or are added by an admin can join'
+                                      : 'Only invited members can join — Pro feature',
+                                  style: const TextStyle(
+                                      color: Colors.grey, fontSize: 12),
+                                ),
                               ],
                             ),
                           ),
                           Switch(
                             value: _isPrivate,
                             onChanged: (val) async {
+                              if (_isChurchCommunity) {
+                                setState(() => _isPrivate = val);
+                                return;
+                              }
                               if (val) {
-                                final isPaid = await _interactionService
-                                    .isPaidUser();
-                                if (isPaid) {
+                                final isPro = await SubscriptionService().isPro();
+                                if (isPro) {
                                   setState(() => _isPrivate = true);
                                 } else {
                                   if (mounted) {
-                                    showDialog(
-                                      context: context,
-                                      builder: (_) => AlertDialog(
-                                        backgroundColor:
-                                            const Color(0xFF1A1A1A),
-                                        title: const Text(
-                                            'Upgrade to Pro',
-                                            style: TextStyle(
-                                                color: Colors.white)),
-                                        content: const Text(
-                                          'Private communities require a Pro subscription.',
-                                          style: TextStyle(
-                                              color: Colors.grey),
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context),
-                                            child: const Text('OK',
-                                                style: TextStyle(
-                                                    color: Colors.white)),
-                                          ),
-                                        ],
-                                      ),
-                                    );
+                                    final upgraded = await UpgradeSheet.show(context);
+                                    if (upgraded == true && mounted) {
+                                      setState(() => _isPrivate = true);
+                                    }
                                   }
                                 }
                               } else {
@@ -403,32 +694,32 @@ class _CommunitySettingsScreenState
                         ],
                       ),
                     ),
+                    const SizedBox(height: 16),
 
-                    const SizedBox(height: 32),
-
-                    // ── CO-ADMINS ─────────────────────────
-                    _sectionLabel('Co-admins'),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Co-admins can post announcements and manage the community.',
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Add co-admin
-                    if (widget.isCreator) ...[
+                    // ── ADD MEMBER BY USERNAME (private church
+                    // sub-groups only) ──────────────────────────
+                    // Lets an admin add a specific church follower
+                    // directly, without requiring a QR scan.
+                    if (_isChurchCommunity && _isPrivate) ...[
+                      _sectionLabel('Add Member'),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Add a specific church follower to this group by username.',
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
                             child: TextField(
-                              controller: _coAdminController,
+                              controller: _addMemberController,
                               style: const TextStyle(color: Colors.white),
                               decoration: _inputDecoration('@username'),
                             ),
                           ),
                           const SizedBox(width: 10),
                           ElevatedButton(
-                            onPressed: _addCoAdmin,
+                            onPressed: _addMemberByUsername,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: Colors.black,
@@ -439,59 +730,96 @@ class _CommunitySettingsScreenState
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
                     ],
 
-                    // Co-admin list
-                    if (coAdmins.isEmpty)
-                      const Text('No co-admins yet',
-                          style: TextStyle(color: Colors.grey))
-                    else
-                      ...coAdmins.map((member) {
-                        final user = member['users'];
-                        final displayName = user?['display_name'] ??
-                            user?['username'] ??
-                            'Unknown';
-                        final username = user?['username'] ?? '';
-                        final isCurrentUser =
-                            member['user_id'] == currentUserId;
+                    const SizedBox(height: 16),
 
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A1A1A),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.person_outline,
-                                  color: Colors.grey, size: 18),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(displayName,
-                                        style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w500)),
-                                    Text('@$username',
-                                        style: const TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 12)),
-                                  ],
+                    // ── MEMBERS ────────────────────────────
+                    // This single list now covers everyone, including
+                    // co-admins — there's no separate co-admins section
+                    // anymore. Tap any non-creator member (if you're the
+                    // creator or co-admin) to manage them via the action
+                    // sheet, which calls the RPC-backed service methods
+                    // above. Promote/demote/transfer only appear for the
+                    // creator; remove-from-community is available to
+                    // co-admins too (server-side limited to plain members).
+                    _sectionLabel('Members'),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'View and manage everyone in this community.',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+
+                    if (_isLoadingMembers)
+                      const Center(child: CircularProgressIndicator(color: Colors.white))
+                    else if (_allMembers.isEmpty)
+                      const Text('No members yet', style: TextStyle(color: Colors.grey))
+                    else
+                      ..._allMembers.map((member) {
+                        final user = member['users'];
+                        final displayName = user?['display_name'] ?? user?['username'] ?? 'Unknown';
+                        final username = user?['username'] ?? '';
+                        final role = member['role'] as String? ?? 'member';
+                        final isCurrentUser = member['user_id'] == currentUserId;
+                        final isCreatorMember = member['user_id'] == widget.community['created_by'];
+                        final canManage = (widget.isCreator || role == 'co-admin') &&
+                            !isCurrentUser &&
+                            !isCreatorMember;
+
+                        String roleLabel;
+                        Color roleColor;
+                        if (isCreatorMember) {
+                          roleLabel = 'Creator';
+                          roleColor = Colors.amber;
+                        } else if (role == 'co-admin') {
+                          roleLabel = 'Co-admin';
+                          roleColor = Colors.blueAccent;
+                        } else {
+                          roleLabel = 'Member';
+                          roleColor = Colors.grey;
+                        }
+
+                        return GestureDetector(
+                          onTap: canManage ? () => _showMemberActions(member) : null,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1A1A1A),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.person_outline, color: Colors.grey, size: 18),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(children: [
+                                        Text(displayName,
+                                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: roleColor.withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(roleLabel,
+                                              style: TextStyle(color: roleColor, fontSize: 10, fontWeight: FontWeight.w600)),
+                                        ),
+                                      ]),
+                                      Text('@$username', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              if (widget.isCreator && !isCurrentUser)
-                                GestureDetector(
-                                  onTap: () => _removeCoAdmin(member),
-                                  child: const Icon(Icons.close,
-                                      color: Colors.grey, size: 18),
-                                ),
-                            ],
+                                if (canManage)
+                                  const Icon(Icons.more_vert, color: Colors.grey, size: 18),
+                              ],
+                            ),
                           ),
                         );
                       }),
@@ -540,12 +868,24 @@ class _CommunitySettingsScreenState
     );
   }
 
-  Widget _buildLabel(String text) {
-    return Text(text,
+  Widget _buildLabel(String text, {required bool required}) {
+    return RichText(
+      text: TextSpan(
+        text: text,
         style: const TextStyle(
             color: Colors.white,
             fontSize: 14,
-            fontWeight: FontWeight.w500));
+            fontWeight: FontWeight.w500),
+        children: required
+            ? const [
+                TextSpan(
+                  text: ' *',
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                ),
+              ]
+            : null,
+      ),
+    );
   }
 
   Widget _dropdown<T>({

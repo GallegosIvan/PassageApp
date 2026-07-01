@@ -50,7 +50,13 @@ class BibleService {
   // ── GET ALL AVAILABLE TRANSLATIONS ───────────────────────
   // API CALL: Free Use Bible API
   // Endpoint: GET /api/available_translations.json
-  // Returns list of all 1000+ translations available
+  // Filtered to complete 66-book Bibles only — excludes New
+  // Testament-only translations (27 books) and partial/portion
+  // translations (a handful of books or just a few chapters).
+  // This is a Christian Bible study app, so the picker should
+  // only ever offer full Bibles, not incomplete translations
+  // someone could pick by accident and then find missing books
+  // they expect to be there.
   Future<List<Map<String, dynamic>>> getAvailableTranslations() async {
     final response = await http.get(
       Uri.parse('$_baseUrl/available_translations.json'),
@@ -58,7 +64,8 @@ class BibleService {
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
-      return List<Map<String, dynamic>>.from(data['translations']);
+      final all = List<Map<String, dynamic>>.from(data['translations']);
+      return all.where((t) => (t['numberOfBooks'] as int?) == 66).toList();
     }
     throw Exception('Failed to load translations');
   }

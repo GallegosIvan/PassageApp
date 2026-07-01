@@ -25,17 +25,33 @@ dependencies:
   riverpod_annotation: ^2.3.3
 
   # Subscriptions / paywall
-  purchases_flutter: 9.16.0
+  purchases_flutter: ^10.2.0
 
   # Icons
   cupertino_icons: ^1.0.6
 
-  shared_preferences: ^2.2.3
+  shared_preferences: ^2.2.2
 
   # QR code generation
   qr_flutter: ^4.1.0
 
-  flutter_markdown: ^0.7.7
+  mobile_scanner: ^5.2.3
+
+  in_app_review: ^2.0.9
+
+  share_plus: ^10.1.4
+
+  purchases_ui_flutter: ^10.2.0
+  flutter_markdown_plus: ^1.0.7
+  dropdown_search: 6.0.2
+
+  speech_to_text: ^7.0.0
+
+  image_picker: ^1.1.2
+
+  permission_handler: ^11.3.1
+  firebase_messaging: ^16.4.1
+  firebase_core: ^4.11.0
 
 dev_dependencies:
   flutter_test:
@@ -45,9 +61,11 @@ dev_dependencies:
   riverpod_generator: ^2.3.9
   integration_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
 
   assets: 
       - .env
+      - assets/icon/icon.png

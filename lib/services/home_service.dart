@@ -87,20 +87,46 @@ class HomeService {
     }
   }
 
+  // ── GET ALL DAYS READ ─────────────────────────────────────
+  // API CALL: Supabase DB — full reading history since account
+  // creation, for the calendar history screen. No date filter,
+  // unlike getDaysReadThisWeek above.
+  Future<List<String>> getAllDaysRead() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return [];
+
+    try {
+      final response = await _client
+          .from('reading_days')
+          .select('read_date')
+          .eq('user_id', userId)
+          .order('read_date', ascending: false);
+
+      return List<String>.from(
+          (response as List).map((r) => r['read_date'] as String));
+    } catch (e) {
+      print('getAllDaysRead error: $e');
+      return [];
+    }
+  }
+
   // ── GET ANNOUNCEMENTS ─────────────────────────────────────
   // API CALL: Supabase DB — fetches announcements from communities
   // the user belongs to, posted by admins only
   // API CALL: ChurchService.getHomeAnnouncements → Supabase DB
-// Fetches announcements from both communities and churches
-// in one sorted feed
+  // Fetches announcements from both communities and churches
+  // in one sorted feed
   Future<List<Map<String, dynamic>>> getAnnouncements() async {
     return await ChurchService().getHomeAnnouncements();
   }
 
   // ── GET VERSE OF THE DAY ──────────────────────────────────
   // No API call — uses day of year to pick a consistent verse
-  // Same verse all day for all users, changes at midnight
-  Future<Map<String, String>> getVerseOfTheDay(String translationId) async {
+  // Same verse all day for all users, changes at midnight.
+  // Returns bookId/bookName/chapter/verse alongside the display
+  // text so the home screen can navigate straight to the exact
+  // verse instead of just opening the book list.
+  Future<Map<String, dynamic>> getVerseOfTheDay(String translationId) async {
     final dayOfYear = DateTime.now()
         .difference(DateTime(DateTime.now().year, 1, 1))
         .inDays + 1;
@@ -142,6 +168,10 @@ class HomeService {
             return {
               'ref': '$bookName $chapter:$verse',
               'text': textBuffer.toString().trim(),
+              'bookId': bookId,
+              'bookName': bookName,
+              'chapter': chapter,
+              'verse': verse,
             };
           }
         }
@@ -150,9 +180,16 @@ class HomeService {
       print('getVerseOfTheDay error: $e');
     }
 
+    // Fallback verse also carries real navigation data (John 3
+    // exists in every translation) so the button still works
+    // correctly even when the lookup above fails.
     return {
       'ref': 'John 3:16',
       'text': 'For God so loved the world that He gave His one and only Son, that everyone who believes in Him shall not perish but have eternal life.',
+      'bookId': 'JHN',
+      'bookName': 'John',
+      'chapter': 3,
+      'verse': 16,
     };
   }
 }

@@ -5,6 +5,7 @@ import 'community_detail_screen.dart';
 import 'create_community_screen.dart';
 import 'church_detail_screen.dart';
 import 'create_church_screen.dart';
+import 'qr_scan_screen.dart';
 
 class CommunitiesScreen extends StatefulWidget {
   const CommunitiesScreen({super.key});
@@ -27,18 +28,13 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
   List<Map<String, dynamic>> _followedChurches = [];
   bool _isLoadingMyChurches = true;
 
-  // Discover — communities
+  // Discover — communities (churches are no longer discoverable —
+  // joining a church only happens via in-person QR scan)
   List<Map<String, dynamic>> _discoverCommunities = [];
   bool _isLoadingDiscover = true;
   final _communitySearchController = TextEditingController();
   String? _filterBook;
-  int? _filterChapter;
   bool _showFilters = false;
-
-  // Discover — churches
-  List<Map<String, dynamic>> _allChurches = [];
-  bool _isLoadingChurches = true;
-  final _churchSearchController = TextEditingController();
 
   final List<String> _books = [
     'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy',
@@ -64,16 +60,12 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     _communitySearchController.addListener(() {
       _loadDiscoverCommunities(query: _communitySearchController.text);
     });
-    _churchSearchController.addListener(() {
-      _loadAllChurches(query: _churchSearchController.text);
-    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     _communitySearchController.dispose();
-    _churchSearchController.dispose();
     super.dispose();
   }
 
@@ -82,7 +74,6 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
       _loadMyCommunities(),
       _loadFollowedChurches(),
       _loadDiscoverCommunities(),
-      _loadAllChurches(),
     ]);
   }
 
@@ -112,21 +103,10 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     final communities = await _communityService.getDiscoverCommunities(
       searchQuery: query,
       filterBook: _filterBook,
-      filterChapter: _filterChapter,
     );
     if (mounted) setState(() {
       _discoverCommunities = communities;
       _isLoadingDiscover = false;
-    });
-  }
-
-  Future<void> _loadAllChurches({String? query}) async {
-    if (!mounted) return;
-    setState(() => _isLoadingChurches = true);
-    final churches = await _churchService.getChurches(searchQuery: query);
-    if (mounted) setState(() {
-      _allChurches = churches;
-      _isLoadingChurches = false;
     });
   }
 
@@ -156,21 +136,15 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     }
   }
 
-  Future<void> _toggleFollowChurch(
-      Map<String, dynamic> church, bool isFollowing) async {
+  Future<void> _unfollowChurch(Map<String, dynamic> church) async {
     try {
-      if (isFollowing) {
-        await _churchService.unfollowChurch(church['id']);
-      } else {
-        await _churchService.followChurch(church['id']);
-      }
+      await _churchService.unfollowChurch(church['id']);
       await _loadFollowedChurches();
-      await _loadAllChurches(query: _churchSearchController.text);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isFollowing ? 'Failed to unfollow' : 'Failed to follow'),
+          const SnackBar(
+            content: Text('Failed to leave church'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -182,7 +156,6 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
   void _clearFilters() {
     setState(() {
       _filterBook = null;
-      _filterChapter = null;
     });
     _loadDiscoverCommunities(query: _communitySearchController.text);
   }
@@ -256,21 +229,32 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                   MaterialPageRoute(builder: (_) => const CreateChurchScreen()),
                 );
                 _loadFollowedChurches();
-                _loadAllChurches();
               }
             },
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.grey,
-          tabs: const [
-            Tab(text: 'My Communities'),
-            Tab(text: 'Discover'),
-            Tab(text: 'My Churches'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              tabBarTheme: const TabBarThemeData(
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: Colors.white,
+              ),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: Colors.white,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.grey,
+              tabs: const [
+                Tab(text: 'My Communities'),
+                Tab(text: 'Discover'),
+                Tab(text: 'My Churches'),
+              ],
+            ),
+          ),
         ),
       ),
       body: TabBarView(
@@ -328,310 +312,191 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                       ),
                     ),
 
-          // ── DISCOVER (sub-tabs) ───────────────────────────
-          DefaultTabController(
-            length: 2,
-            child: Column(
-              children: [
-                Container(
-                  color: const Color(0xFF1A1A1A),
-                  child: const TabBar(
-                    indicatorColor: Colors.white,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.grey,
-                    tabs: [
-                      Tab(text: 'Communities'),
-                      Tab(text: 'Churches'),
-                    ],
+          // ── DISCOVER (communities only — no church discovery) ──
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: TextField(
+                  controller: _communitySearchController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Search communities...',
+                    hintStyle: const TextStyle(color: Colors.grey),
+                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        Icons.tune,
+                        color: _filterBook != null ? Colors.white : Colors.grey,
+                      ),
+                      onPressed: () => setState(() => _showFilters = !_showFilters),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF1A1A1A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
                 ),
-                Expanded(
-                  child: TabBarView(
+              ),
+              if (_showFilters)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Discover — Communities
-                      Column(
+                      Row(
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                            child: TextField(
-                              controller: _communitySearchController,
-                              style: const TextStyle(color: Colors.white),
-                              decoration: InputDecoration(
-                                hintText: 'Search communities...',
-                                hintStyle: const TextStyle(color: Colors.grey),
-                                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    Icons.tune,
-                                    color: (_filterBook != null || _filterChapter != null)
-                                        ? Colors.white
-                                        : Colors.grey,
-                                  ),
-                                  onPressed: () => setState(() => _showFilters = !_showFilters),
-                                ),
-                                filled: true,
-                                fillColor: const Color(0xFF1A1A1A),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide.none,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              ),
+                          const Text('Filter by:', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                          const Spacer(),
+                          if (_filterBook != null)
+                            GestureDetector(
+                              onTap: _clearFilters,
+                              child: const Text('Clear', style: TextStyle(color: Colors.white, fontSize: 13)),
                             ),
-                          ),
-                          if (_showFilters)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Text('Filter by:', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                                      const Spacer(),
-                                      if (_filterBook != null || _filterChapter != null)
-                                        GestureDetector(
-                                          onTap: _clearFilters,
-                                          child: const Text('Clear', style: TextStyle(color: Colors.white, fontSize: 13)),
-                                        ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF1A1A1A),
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                          child: DropdownButtonHideUnderline(
-                                            child: DropdownButton<String>(
-                                              value: _filterBook,
-                                              hint: const Text('Book', style: TextStyle(color: Colors.grey)),
-                                              dropdownColor: const Color(0xFF1A1A1A),
-                                              isExpanded: true,
-                                              style: const TextStyle(color: Colors.white),
-                                              items: _books.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
-                                              onChanged: (val) {
-                                                setState(() {
-                                                  _filterBook = val;
-                                                  _filterChapter = null;
-                                                });
-                                                _loadDiscoverCommunities(query: _communitySearchController.text);
-                                              },
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF1A1A1A),
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                          child: DropdownButtonHideUnderline(
-                                            child: DropdownButton<int>(
-                                              value: _filterChapter,
-                                              hint: const Text('Chapter', style: TextStyle(color: Colors.grey)),
-                                              dropdownColor: const Color(0xFF1A1A1A),
-                                              isExpanded: true,
-                                              style: const TextStyle(color: Colors.white),
-                                              items: _filterBook == null
-                                                  ? []
-                                                  : List.generate(150, (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}'))),
-                                              onChanged: _filterBook == null
-                                                  ? null
-                                                  : (val) {
-                                                      setState(() => _filterChapter = val);
-                                                      _loadDiscoverCommunities(query: _communitySearchController.text);
-                                                    },
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (_filterBook != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: Wrap(
-                                        spacing: 8,
-                                        children: [
-                                          Chip(
-                                            label: Text(_filterBook!, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                                            backgroundColor: const Color(0xFF2A2A2A),
-                                            deleteIcon: const Icon(Icons.close, size: 14, color: Colors.grey),
-                                            onDeleted: () {
-                                              setState(() { _filterBook = null; _filterChapter = null; });
-                                              _loadDiscoverCommunities(query: _communitySearchController.text);
-                                            },
-                                          ),
-                                          if (_filterChapter != null)
-                                            Chip(
-                                              label: Text('Chapter $_filterChapter', style: const TextStyle(color: Colors.white, fontSize: 12)),
-                                              backgroundColor: const Color(0xFF2A2A2A),
-                                              deleteIcon: const Icon(Icons.close, size: 14, color: Colors.grey),
-                                              onDeleted: () {
-                                                setState(() => _filterChapter = null);
-                                                _loadDiscoverCommunities(query: _communitySearchController.text);
-                                              },
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  const SizedBox(height: 8),
-                                ],
-                              ),
-                            ),
-                          Expanded(
-                            child: _isLoadingDiscover
-                                ? const Center(child: CircularProgressIndicator(color: Colors.white))
-                                : _discoverCommunities.isEmpty
-                                    ? const Center(child: Text('No communities found', style: TextStyle(color: Colors.grey)))
-                                    : RefreshIndicator(
-                                        onRefresh: () => _loadDiscoverCommunities(query: _communitySearchController.text),
-                                        color: Colors.white,
-                                        child: ListView.builder(
-                                          padding: const EdgeInsets.all(16),
-                                          itemCount: _discoverCommunities.length,
-                                          itemBuilder: (context, index) {
-                                            final community = _discoverCommunities[index];
-                                            return _CommunityCard(
-                                              community: community,
-                                              isMember: false,
-                                              onJoin: () => _joinCommunity(community['id']),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                          ),
                         ],
                       ),
-
-                      // Discover — Churches
-                      Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: TextField(
-                              controller: _churchSearchController,
-                              style: const TextStyle(color: Colors.white),
-                              decoration: InputDecoration(
-                                hintText: 'Search churches...',
-                                hintStyle: const TextStyle(color: Colors.grey),
-                                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                                filled: true,
-                                fillColor: const Color(0xFF1A1A1A),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide.none,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              ),
-                            ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1A1A1A),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _filterBook,
+                            hint: const Text('Book', style: TextStyle(color: Colors.grey)),
+                            dropdownColor: const Color(0xFF1A1A1A),
+                            isExpanded: true,
+                            style: const TextStyle(color: Colors.white),
+                            items: _books.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
+                            onChanged: (val) {
+                              setState(() => _filterBook = val);
+                              _loadDiscoverCommunities(query: _communitySearchController.text);
+                            },
                           ),
-                          Expanded(
-                            child: _isLoadingChurches
-                                ? const Center(child: CircularProgressIndicator(color: Colors.white))
-                                : _allChurches.isEmpty
-                                    ? Center(
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            const Icon(Icons.church_outlined, color: Colors.grey, size: 48),
-                                            const SizedBox(height: 16),
-                                            const Text('No churches yet', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                                            const SizedBox(height: 8),
-                                            const Text('Be the first to add your church', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                                          ],
-                                        ),
-                                      )
-                                    : RefreshIndicator(
-                                        onRefresh: () => _loadAllChurches(query: _churchSearchController.text),
-                                        color: Colors.white,
-                                        child: ListView.builder(
-                                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                                          itemCount: _allChurches.length,
-                                          itemBuilder: (context, index) {
-                                            final church = _allChurches[index];
-                                            final isFollowing = _followedChurches.any((c) => c['id'] == church['id']);
-                                            return _ChurchCard(
-                                              church: church,
-                                              isFollowing: isFollowing,
-                                              onTap: () async {
-                                                await Navigator.of(context).push(
-                                                  MaterialPageRoute(builder: (_) => ChurchDetailScreen(church: church)),
-                                                );
-                                                _loadAllChurches();
-                                                _loadFollowedChurches();
-                                              },
-                                              onToggleFollow: () => _toggleFollowChurch(church, isFollowing),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                          ),
-                        ],
+                        ),
                       ),
+                      if (_filterBook != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Wrap(
+                            spacing: 8,
+                            children: [
+                              Chip(
+                                label: Text(_filterBook!, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                backgroundColor: const Color(0xFF2A2A2A),
+                                deleteIcon: const Icon(Icons.close, size: 14, color: Colors.grey),
+                                onDeleted: () {
+                                  setState(() => _filterBook = null);
+                                  _loadDiscoverCommunities(query: _communitySearchController.text);
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
-              ],
-            ),
+              Expanded(
+                child: _isLoadingDiscover
+                    ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                    : _discoverCommunities.isEmpty
+                        ? const Center(child: Text('No communities found', style: TextStyle(color: Colors.grey)))
+                        : RefreshIndicator(
+                            onRefresh: () => _loadDiscoverCommunities(query: _communitySearchController.text),
+                            color: Colors.white,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _discoverCommunities.length,
+                              itemBuilder: (context, index) {
+                                final community = _discoverCommunities[index];
+                                return _CommunityCard(
+                                  community: community,
+                                  isMember: false,
+                                  onJoin: () => _joinCommunity(community['id']),
+                                );
+                              },
+                            ),
+                          ),
+              ),
+            ],
           ),
 
           // ── MY CHURCHES ───────────────────────────────────
-          _isLoadingMyChurches
-              ? const Center(child: CircularProgressIndicator(color: Colors.white))
-              : _followedChurches.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.church_outlined, color: Colors.grey, size: 48),
-                          const SizedBox(height: 16),
-                          const Text('No churches yet', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          const Text('Follow churches in the Discover tab', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: () => _tabController.animateTo(1),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: const Text('Discover'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadFollowedChurches,
-                      color: Colors.white,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _followedChurches.length,
-                        itemBuilder: (context, index) {
-                          final church = _followedChurches[index];
-                          return _ChurchCard(
-                            church: church,
-                            isFollowing: true,
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => ChurchDetailScreen(church: church)),
-                              );
-                              _loadFollowedChurches();
-                            },
-                            onToggleFollow: () => _toggleFollowChurch(church, true),
-                          );
-                        },
-                      ),
+          // No public church discovery. Joining only happens via
+          // in-person QR code scan.
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const QrScanScreen()),
+                    ).then((_) => _loadFollowedChurches()),
+                    icon: const Icon(Icons.qr_code_scanner),
+                    label: const Text('Scan church QR code',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _isLoadingMyChurches
+                    ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                    : _followedChurches.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.church_outlined, color: Colors.grey, size: 48),
+                                const SizedBox(height: 16),
+                                const Text('No churches yet',
+                                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Scan a church\'s QR code in person to join',
+                                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _loadFollowedChurches,
+                            color: Colors.white,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              itemCount: _followedChurches.length,
+                              itemBuilder: (context, index) {
+                                final church = _followedChurches[index];
+                                return _ChurchCard(
+                                  church: church,
+                                  onTap: () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => ChurchDetailScreen(church: church)),
+                                    );
+                                    _loadFollowedChurches();
+                                  },
+                                  onLeave: () => _unfollowChurch(church),
+                                );
+                              },
+                            ),
+                          ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -654,6 +519,9 @@ class _CommunityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final book = community['book'];
+    final chapter = community['chapter'];
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -671,9 +539,13 @@ class _CommunityCard extends StatelessWidget {
                 children: [
                   Text(community['name'] ?? '',
                       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text('${community['book']} ${community['chapter']}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                  if (book != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      chapter != null ? '$book $chapter' : book.toString(),
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                  ],
                   if (community['description'] != null && community['description'].toString().isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Text(community['description'],
@@ -718,18 +590,16 @@ class _CommunityCard extends StatelessWidget {
   }
 }
 
-// ── CHURCH CARD ───────────────────────────────────────────────
+// ── CHURCH CARD (My Churches only — no follow/discover state) ──
 class _ChurchCard extends StatelessWidget {
   final Map<String, dynamic> church;
-  final bool isFollowing;
   final VoidCallback onTap;
-  final VoidCallback onToggleFollow;
+  final VoidCallback onLeave;
 
   const _ChurchCard({
     required this.church,
-    required this.isFollowing,
     required this.onTap,
-    required this.onToggleFollow,
+    required this.onLeave,
   });
 
   @override
@@ -778,18 +648,7 @@ class _ChurchCard extends StatelessWidget {
                 ],
               ),
             ),
-            ElevatedButton(
-              onPressed: onToggleFollow,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isFollowing ? Colors.transparent : Colors.white,
-                foregroundColor: isFollowing ? Colors.white : Colors.black,
-                side: isFollowing ? const BorderSide(color: Colors.white) : BorderSide.none,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: Text(isFollowing ? 'Following' : 'Follow',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-            ),
+            const Icon(Icons.chevron_right, color: Colors.grey),
           ],
         ),
       ),

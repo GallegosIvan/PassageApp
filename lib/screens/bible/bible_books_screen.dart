@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../../services/bible_service.dart';
 import '../../services/bible_interaction_service.dart';
 import 'bible_chapters_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class BibleBooksScreen extends StatefulWidget {
   const BibleBooksScreen({super.key});
@@ -15,12 +14,15 @@ class BibleBooksScreen extends StatefulWidget {
 class _BibleBooksScreenState extends State<BibleBooksScreen> {
   final _bibleService = BibleService();
   final _interactionService = BibleInteractionService();
+  final _client = Supabase.instance.client;
 
   List<Map<String, dynamic>> _books = [];
   List<Map<String, dynamic>> _filteredBooks = [];
   List<Map<String, dynamic>> _translations = [];
   String _translationId = 'BSB';
   List<Map<String, dynamic>> _bookmarks = [];
+  // Map of bookId -> number of chapters read
+  Map<String, int> _readChapterCounts = {};
   final colorMap = {
     'purple': Colors.white,
     'blue': Colors.blue,
@@ -72,11 +74,15 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
       final bookmarks = await _interactionService.getBookmarks();
 
       if (!mounted) return;
+      final readCounts = await _loadReadChapterCounts();
+
+      if (!mounted) return;
       setState(() {
         _translationId = translationId;
         _books = books;
         _filteredBooks = books;
         _bookmarks = bookmarks;
+        _readChapterCounts = readCounts;
         _isLoading = false;
       });
     } catch (e) {
@@ -85,6 +91,26 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<Map<String, int>> _loadReadChapterCounts() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return {};
+    try {
+      final response = await _client
+          .from('reading_history')
+          .select('book_id')
+          .eq('user_id', userId);
+      final counts = <String, int>{};
+      for (final row in response as List) {
+        final bookId = row['book_id'] as String;
+        counts[bookId] = (counts[bookId] ?? 0) + 1;
+      }
+      return counts;
+    } catch (e) {
+      print('loadReadChapterCounts error: $e');
+      return {};
     }
   }
 
@@ -105,21 +131,26 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
     });
   }
 
-  // ── TRANSLATION PICKER ────────────────────────────────────
+  bool _isBookFullyRead(Map<String, dynamic> book) {
+    final bookId = book['id'] as String;
+    final totalChapters = book['numberOfChapters'] as int;
+    final readCount = _readChapterCounts[bookId] ?? 0;
+    return readCount >= totalChapters;
+  }
+
+  // ── SHOW TRANSLATION PICKER ────────────────────────────────
+  // Uses BibleService.getAvailableTranslations(), which filters
+  // to complete 66-book Bibles only — no NT-only or partial
+  // translations. Previously this fetched the unfiltered list
+  // directly from the HelloAO API, which is why the picker was
+  // still showing all 1000+ translations despite the filter
+  // being added to the service. Now there's a single source of
+  // truth for "what counts as a selectable translation."
   Future<void> _showTranslationPicker() async {
-    // API CALL: Free Use Bible API — fetch all available translations
     if (_translations.isEmpty) {
       setState(() => _isLoadingTranslations = true);
       try {
-        final response = await http.get(
-          Uri.parse(
-              'https://bible.helloao.org/api/available_translations.json'),
-        );
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          _translations =
-              List<Map<String, dynamic>>.from(data['translations']);
-        }
+        _translations = await _bibleService.getAvailableTranslations();
       } catch (e) {
         print('Failed to load translations: $e');
       }
@@ -128,7 +159,6 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
 
     if (!mounted) return;
 
-    // Show translation picker bottom sheet
     final selected = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       backgroundColor: Colors.black,
@@ -146,7 +176,6 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
     final newId = selected['id'] as String;
     if (newId == _translationId) return;
 
-    // Ask if user wants this as preferred translation
     if (!mounted) return;
     final setAsPreferred = await showDialog<bool>(
       context: context,
@@ -166,9 +195,7 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white24,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.white24),
             child: const Text('Set as preferred',
                 style: TextStyle(color: Colors.white)),
           ),
@@ -177,11 +204,9 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
     );
 
     if (setAsPreferred == true) {
-      // API CALL: BibleService.setUserTranslationId → Supabase DB
       await _bibleService.setUserTranslationId(newId);
     }
 
-    // Reload books with new translation
     setState(() {
       _translationId = newId;
       _isLoading = true;
@@ -209,22 +234,18 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: const Text('Bible',
-            style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold)),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          // Translation picker button
           GestureDetector(
             onTap: _isLoadingTranslations ? null : _showTranslationPicker,
             child: Container(
               margin: const EdgeInsets.only(right: 16),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: Colors.white.withOpacity(0.24)),
+                border: Border.all(color: Colors.white.withOpacity(0.24)),
               ),
               child: _isLoadingTranslations
                   ? const SizedBox(
@@ -232,164 +253,195 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
                       height: 16,
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2))
-                  : Row(
-                      children: [
-                        Text(
-                          _translationId,
+                  : Row(children: [
+                      Text(_translationId,
                           style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.arrow_drop_down,
-                              color: Colors.white, size: 18),
-                      ],
-                    ),
+                              fontSize: 13)),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.arrow_drop_down,
+                          color: Colors.white, size: 18),
+                    ]),
             ),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // ── BOOKMARK BANNER ───────────────────────────────
-          if (_bookmarks.isNotEmpty)
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: _bookmarks.map((bookmark) {
-                  final colorMap = {
-                    'purple': Colors.white,
-                    'blue': Colors.blue,
-                    'green': Colors.green,
-                  };
-                  final color = colorMap[bookmark['color']] ?? Colors.white;
-                  return GestureDetector(
-                    onTap: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => BibleChaptersScreen(
-                            translationId: _translationId,
-                            book: _books.firstWhere(
-                              (b) => b['id'] == bookmark['book_id'],
-                              orElse: () => {
-                                'id': bookmark['book_id'],
-                                'name': bookmark['book_name'],
-                                'numberOfChapters': 50,
-                              },
-                            ),
+      body: Column(children: [
+        // ── BOOKMARK BANNER ───────────────────────────────
+        if (_bookmarks.isNotEmpty)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: _bookmarks.map((bookmark) {
+                final colorMap = {
+                  'purple': Colors.white,
+                  'blue': Colors.blue,
+                  'green': Colors.green,
+                };
+                final color = colorMap[bookmark['color']] ?? Colors.white;
+                return GestureDetector(
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => BibleChaptersScreen(
+                          translationId: _translationId,
+                          book: _books.firstWhere(
+                            (b) => b['id'] == bookmark['book_id'],
+                            orElse: () => {
+                              'id': bookmark['book_id'],
+                              'name': bookmark['book_name'],
+                              'numberOfChapters': 50,
+                            },
                           ),
                         ),
-                      );
-                      _loadData();
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 10),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: color.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: color.withOpacity(0.5)),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.bookmark, color: color, size: 16),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${bookmark['book_name']} ${bookmark['chapter']}',
-                            style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
+                    );
+                    _loadData();
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: color.withOpacity(0.5)),
                     ),
-                  );
-                }).toList(),
-              ),
-            ),
-
-          // ── SEARCH BAR ────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Search books...',
-                hintStyle: const TextStyle(color: Colors.white),
-                prefixIcon: const Icon(Icons.search,
-                  color: Colors.white),
-                filled: true,
-                fillColor: Colors.black,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
-              ),
-            ),
-          ),
-
-          // ── BOOKS LIST ────────────────────────────────────
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                        color: Colors.white))
-                : _error != null
-                    ? Center(
-                        child: Text(_error!,
-                            style:
-                                const TextStyle(color: Colors.red)))
-                    : ListView.builder(
-                        itemCount: _filteredBooks.length,
-                        itemBuilder: (context, index) {
-                          final book = _filteredBooks[index];
-                          final isBookmarked =
-                              _bookmarks.any((b) => b['book_id'] == book['id']);
-
-                          return ListTile(
-                            title: Text(
-                              book['name'] ?? '',
-                              style:
-                                  const TextStyle(color: Colors.white),
-                            ),
-                            subtitle: Text(
-                              '${book['numberOfChapters']} chapters',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12),
-                            ),
-                            leading: _bookmarks.any((b) => b['book_id'] == book['id'])
-                              ? Icon(
-                                  Icons.bookmark,
-                                  color: colorMap[_bookmarks.firstWhere(
-                                      (b) => b['book_id'] == book['id'])['color']] ??
-                                      Colors.white,
-                                  size: 20,
-                                )
-                              : null,
-                            trailing: const Icon(Icons.chevron_right,
-                              color: Colors.white),
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => BibleChaptersScreen(
-                                    translationId: _translationId,
-                                    book: book,
-                                  ),
-                                ),
-                              );
-                              _loadData();
-                            },
-                          );
-                        },
+                    child: Row(children: [
+                      Icon(Icons.bookmark, color: color, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${bookmark['book_name']} ${bookmark['chapter']}',
+                        style: TextStyle(
+                            color: color,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500),
                       ),
+                    ]),
+                  ),
+                );
+              }).toList(),
+            ),
           ),
-        ],
-      ),
+
+        // ── SEARCH BAR ────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _searchController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Search books...',
+              hintStyle: const TextStyle(color: Colors.white),
+              prefixIcon: const Icon(Icons.search, color: Colors.white),
+              filled: true,
+              fillColor: Colors.black,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+          ),
+        ),
+
+        // ── BOOKS LIST ────────────────────────────────────
+        Expanded(
+          child: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: Colors.white))
+              : _error != null
+                  ? Center(
+                      child: Text(_error!,
+                          style: const TextStyle(color: Colors.red)))
+                  : ListView.builder(
+                      itemCount: _filteredBooks.length,
+                      itemBuilder: (context, index) {
+                        final book = _filteredBooks[index];
+                        final bookId = book['id'] as String;
+                        final isBookmarked =
+                            _bookmarks.any((b) => b['book_id'] == bookId);
+                        final isFullyRead = _isBookFullyRead(book);
+                        final readCount =
+                            _readChapterCounts[bookId] ?? 0;
+                        final totalChapters =
+                            book['numberOfChapters'] as int;
+
+                        return ListTile(
+                          title: Text(
+                            book['name'] ?? '',
+                            style: TextStyle(
+                              color: isFullyRead
+                                  ? Colors.green
+                                  : Colors.white,
+                              fontWeight: isFullyRead
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                          subtitle: Text(
+                            isFullyRead
+                                ? 'Completed ✓'
+                                : readCount > 0
+                                    ? '$readCount/$totalChapters chapters read'
+                                    : '$totalChapters chapters',
+                            style: TextStyle(
+                              color: isFullyRead
+                                  ? Colors.green.withOpacity(0.7)
+                                  : readCount > 0
+                                      ? Colors.white70
+                                      : Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                          leading: isFullyRead
+                              ? const Icon(Icons.check_circle,
+                                  color: Colors.green, size: 20)
+                              : isBookmarked
+                                  ? Icon(
+                                      Icons.bookmark,
+                                      color: colorMap[_bookmarks.firstWhere(
+                                              (b) => b['book_id'] == bookId)[
+                                          'color']] ??
+                                          Colors.white,
+                                      size: 20,
+                                    )
+                                  : readCount > 0
+                                      ? SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            value: readCount / totalChapters,
+                                            strokeWidth: 2.5,
+                                            backgroundColor:
+                                                Colors.white12,
+                                            valueColor:
+                                                const AlwaysStoppedAnimation<
+                                                    Color>(Colors.green),
+                                          ),
+                                        )
+                                      : null,
+                          trailing: const Icon(Icons.chevron_right,
+                              color: Colors.white),
+                          onTap: () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => BibleChaptersScreen(
+                                  translationId: _translationId,
+                                  book: book,
+                                ),
+                              ),
+                            );
+                            _loadData();
+                          },
+                        );
+                      },
+                    ),
+        ),
+      ]),
     );
   }
 }
@@ -397,7 +449,6 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
 // ============================================================
 // TRANSLATION PICKER SHEET
 // ============================================================
-
 class _TranslationPickerSheet extends StatefulWidget {
   final List<Map<String, dynamic>> translations;
   final String currentId;
@@ -412,8 +463,7 @@ class _TranslationPickerSheet extends StatefulWidget {
       _TranslationPickerSheetState();
 }
 
-class _TranslationPickerSheetState
-    extends State<_TranslationPickerSheet> {
+class _TranslationPickerSheetState extends State<_TranslationPickerSheet> {
   final _searchController = TextEditingController();
   List<Map<String, dynamic>> _filtered = [];
 
@@ -440,9 +490,7 @@ class _TranslationPickerSheetState
                   (t['englishName'] as String? ?? '')
                       .toLowerCase()
                       .contains(q) ||
-                  (t['id'] as String? ?? '')
-                      .toLowerCase()
-                      .contains(q))
+                  (t['id'] as String? ?? '').toLowerCase().contains(q))
               .toList();
     });
   }
@@ -454,86 +502,68 @@ class _TranslationPickerSheetState
       maxChildSize: 0.95,
       minChildSize: 0.5,
       expand: false,
-      builder: (_, scrollController) => Column(
-        children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Select Translation',
+      builder: (_, scrollController) => Column(children: [
+        const SizedBox(height: 12),
+        Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+              color: Colors.white, borderRadius: BorderRadius.circular(2)),
+        ),
+        const SizedBox(height: 16),
+        const Text('Select Translation',
             style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
-                fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Search translations...',
-                hintStyle:
-                  const TextStyle(color: Colors.white),
-                prefixIcon: const Icon(Icons.search,
-                  color: Colors.white),
-                filled: true,
-                fillColor: Colors.black,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
+                fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TextField(
+            controller: _searchController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Search translations...',
+              hintStyle: const TextStyle(color: Colors.white),
+              prefixIcon: const Icon(Icons.search, color: Colors.white),
+              filled: true,
+              fillColor: Colors.black,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ListView.builder(
-              controller: scrollController,
-              itemCount: _filtered.length,
-              itemBuilder: (context, index) {
-                final t = _filtered[index];
-                final id = t['id'] as String? ?? '';
-                final name = t['englishName'] as String? ?? id;
-                final language =
-                    t['languageEnglishName'] as String? ?? '';
-                final isCurrent = id == widget.currentId;
-
-                return ListTile(
-                  title: Text(
-                    name,
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: ListView.builder(
+            controller: scrollController,
+            itemCount: _filtered.length,
+            itemBuilder: (context, index) {
+              final t = _filtered[index];
+              final id = t['id'] as String? ?? '';
+              final name = t['englishName'] as String? ?? id;
+              final language = t['languageEnglishName'] as String? ?? '';
+              final isCurrent = id == widget.currentId;
+              return ListTile(
+                title: Text(name,
                     style: TextStyle(
-                      color:
-                          isCurrent ? Colors.white : Colors.white70,
-                      fontWeight: isCurrent
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '$id • $language',
-                    style: const TextStyle(
-                      color: Colors.white, fontSize: 12),
-                  ),
-                  trailing: isCurrent
-                      ? const Icon(Icons.check,
-                          color: Colors.white)
-                      : null,
-                  onTap: () => Navigator.pop(context, t),
-                );
-              },
-            ),
+                        color: isCurrent ? Colors.white : Colors.white70,
+                        fontWeight: isCurrent
+                            ? FontWeight.bold
+                            : FontWeight.normal)),
+                subtitle: Text('$id • $language',
+                    style: const TextStyle(color: Colors.white, fontSize: 12)),
+                trailing: isCurrent
+                    ? const Icon(Icons.check, color: Colors.white)
+                    : null,
+                onTap: () => Navigator.pop(context, t),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 }

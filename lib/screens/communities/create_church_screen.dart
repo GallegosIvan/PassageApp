@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../services/church_service.dart';
-import '../../services/bible_interaction_service.dart';
 
 class CreateChurchScreen extends StatefulWidget {
   const CreateChurchScreen({super.key});
@@ -18,7 +17,13 @@ class _CreateChurchScreenState extends State<CreateChurchScreen> {
   final _websiteController = TextEditingController();
   bool _isLoading = false;
   bool _confirmed = false;
-  bool _isPrivate = false;
+  Map<String, dynamic>? _limitInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLimit();
+  }
 
   @override
   void dispose() {
@@ -27,6 +32,11 @@ class _CreateChurchScreenState extends State<CreateChurchScreen> {
     _locationController.dispose();
     _websiteController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkLimit() async {
+    final info = await _churchService.checkChurchLimit();
+    if (mounted) setState(() => _limitInfo = info);
   }
 
   Future<void> _create() async {
@@ -44,10 +54,28 @@ class _CreateChurchScreenState extends State<CreateChurchScreen> {
       return;
     }
 
+    // Church creation limit still applies (1 free / 3 Pro) — this
+    // is unrelated to privacy, which is now mandatory for everyone.
+    if (_limitInfo != null && _limitInfo!['allowed'] == false) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'You\'ve reached the limit of ${_limitInfo!['limit']} churches.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
       // API CALL: ChurchService.createChurch → Supabase DB
+      // Churches are always private — no toggle, no public
+      // discovery. Joining only happens via in-person QR scan.
       await _churchService.createChurch(
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim().isEmpty
@@ -59,23 +87,25 @@ class _CreateChurchScreenState extends State<CreateChurchScreen> {
         website: _websiteController.text.trim().isEmpty
             ? null
             : _websiteController.text.trim(),
-        isPrivate: _isPrivate,
       );
 
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Church profile created!'),
+            content: Text('Church profile created! Find your QR code in church settings to invite members in person.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
+        final isLimitError = e.toString().contains('church_limit_reached');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to create church: $e'),
+            content: Text(isLimitError
+                ? 'You\'ve reached your church creation limit.'
+                : 'Failed to create church: $e'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -104,6 +134,64 @@ class _CreateChurchScreenState extends State<CreateChurchScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── CHURCH LIMIT INDICATOR ─────────────────────
+              if (_limitInfo != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: _limitInfo!['allowed'] == false
+                        ? Colors.red.withOpacity(0.1)
+                        : Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    Icon(Icons.church_outlined, size: 16,
+                        color: _limitInfo!['allowed'] == false ? Colors.red : Colors.grey),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${_limitInfo!['churches_created']}/${_limitInfo!['limit']} churches created',
+                        style: TextStyle(
+                          color: _limitInfo!['allowed'] == false ? Colors.red : Colors.grey,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ]),
+                ),
+              ],
+
+              // ── PRIVACY NOTICE ──────────────────────────────
+              Container(
+                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.qr_code_2, color: Colors.grey, size: 20),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Churches join by QR code only',
+                              style: TextStyle(
+                                  color: Colors.white, fontWeight: FontWeight.w500)),
+                          Text(
+                            'Members must scan your church\'s QR code in person to join. There is no public discovery or invite link.',
+                            style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               // ── CHURCH NAME ───────────────────────────────
               _buildLabel('Church Name'),
               const SizedBox(height: 8),
@@ -152,76 +240,6 @@ class _CreateChurchScreenState extends State<CreateChurchScreen> {
               ),
 
               const SizedBox(height: 28),
-
-              // ── PRIVATE CHURCH TOGGLE ─────────────────────
-              const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.lock_outline, color: Colors.grey, size: 20),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Private church',
-                                style: TextStyle(
-                                    color: Colors.white, fontWeight: FontWeight.w500)),
-                            Text('Only people with the invite link can join',
-                                style: TextStyle(color: Colors.grey, fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        value: _isPrivate,
-                        onChanged: (val) async {
-                          if (val) {
-                            final isPaid = await BibleInteractionService().isPaidUser();
-                            if (isPaid) {
-                              setState(() => _isPrivate = true);
-                            } else {
-                              showDialog(
-                                context: context,
-                                builder: (_) => AlertDialog(
-                                  backgroundColor: const Color(0xFF1A1A1A),
-                                  title: const Text('Upgrade to Pro',
-                                      style: TextStyle(color: Colors.white)),
-                                  content: const Text(
-                                    'Private churches are a Pro feature. Upgrade to restrict your church to invite-only members.',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text('Maybe later',
-                                          style: TextStyle(color: Colors.grey)),
-                                    ),
-                                    ElevatedButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.white,
-                                        foregroundColor: Colors.black,
-                                      ),
-                                      child: const Text('Upgrade'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                          } else {
-                            setState(() => _isPrivate = false);
-                          }
-                        },
-                        activeColor: Colors.white,
-                      ),
-                    ],
-                  ),
-                ),
 
               // ── CONFIRMATION ──────────────────────────────
               Container(
