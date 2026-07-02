@@ -418,13 +418,22 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
                     decoration: const BoxDecoration(color: Colors.black, border: Border(top: BorderSide(color: Colors.white10))),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      TextButton.icon(
-                        onPressed: widget.chapterNumber > 1 ? () => _navigateToChapter(widget.chapterNumber - 1) : null,
+                      if (widget.chapterNumber > 1)
+                       TextButton.icon(
+                        onPressed: () => _navigateToChapter(widget.chapterNumber - 1),
                         icon: const Icon(Icons.chevron_left, color: Colors.white, size: 24),
                         label: const Text('Prev', style: TextStyle(color: Colors.white, fontSize: 12)),
-                      ),
+                       )
+                      else
+                       const SizedBox(width: 72),
                       IconButton(onPressed: _showQuizSheet, tooltip: 'Quiz me', icon: const Icon(Icons.quiz_outlined, color: Colors.white, size: 22)),
-                      Text('Ch ${widget.chapterNumber}/${widget.totalChapters}', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                      Flexible(
+                       child: Text('Ch ${widget.chapterNumber}/${widget.totalChapters}', 
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                       ),
+                      ),
                       IconButton(
                         onPressed: _toggleRead,
                         tooltip: _isRead ? 'Mark as unread' : 'Mark as read',
@@ -437,11 +446,14 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
                           color: Colors.white, size: 22,
                         ),
                       ),
-                      TextButton.icon(
-                        onPressed: widget.chapterNumber < widget.totalChapters ? () => _navigateToChapter(widget.chapterNumber + 1) : null,
+                      if (widget.chapterNumber < widget.totalChapters)
+                       TextButton.icon(
+                        onPressed: () => _navigateToChapter(widget.chapterNumber + 1),
                         icon: const Text('Next', style: TextStyle(color: Colors.white, fontSize: 12)),
                         label: const Icon(Icons.chevron_right, color: Colors.white, size: 24),
-                      ),
+                       )
+                      else
+                        const SizedBox(width: 72),
                     ]),
                   ),
                 ]),
@@ -1273,7 +1285,11 @@ class _VerseActionsSheetState extends State<_VerseActionsSheet> {
               onTap: () => setState(() => _showShareInput = true),
             )),
             const SizedBox(width: 10),
-            Expanded(child: _ActionButton(icon: Icons.ios_share_rounded, label: 'Share Outside', onTap: _shareOutsideApp)),
+            Expanded(child: _ActionButton(icon: Icons.ios_share_rounded, label: 'Share Outside', onTap: () async {
+              Navigator.of(context).pop();
+              await Future.delayed(const Duration(milliseconds: 300));
+              await _shareOutsideApp();
+            })),
           ]),
         ],
         if (_showNoteInput) ...[

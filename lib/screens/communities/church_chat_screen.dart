@@ -371,6 +371,7 @@ class _ChurchChatScreenState extends State<ChurchChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: Text(widget.community['name'] ?? '',
@@ -650,9 +651,9 @@ class _ChurchChatScreenState extends State<ChurchChatScreen> {
             ),
 
           Container(
-            padding: EdgeInsets.only(
+            padding: const EdgeInsets.only(
               left: 16, right: 16, top: 10,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 10,
+              bottom: 10,
             ),
             color: const Color(0xFF1A1A1A),
             child: Row(

@@ -36,14 +36,16 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   int _memberCount = 0;
   String? _currentUserId;
   RealtimeChannel? _channel;
+  late Map<String, dynamic> _communityData;
 
-  bool get _isChurchCommunity => widget.community['church_id'] != null;
-  bool get _isBibleStudy => widget.community['is_bible_study'] == true;
+  bool get _isChurchCommunity => _communityData['church_id'] != null;
+  bool get _isBibleStudy => _communityData['is_bible_study'] == true;
   bool get _chapterRequired => !_isChurchCommunity || _isBibleStudy;
 
   @override
   void initState() {
     super.initState();
+    _communityData = Map<String, dynamic>.from(widget.community);
     _currentUserId = _client.auth.currentUser?.id;
     _loadBlockedUsers();
     _loadPosts();
@@ -62,6 +64,19 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
     _chapterController.dispose();
     _channel?.unsubscribe();
     super.dispose();
+  }
+
+  Future<void> _reloadCommunityData() async {
+    try {
+      final result = await _client
+          .from('communities')
+          .select()
+          .eq('id', _communityData['id'])
+          .single();
+      if (mounted) setState(() => _communityData = result);
+    } catch (e) {
+      print('_reloadCommunityData error: \$e');
+    }
   }
 
   Future<void> _loadBlockedUsers() async {
@@ -138,7 +153,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
           children: [
             Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            if (isOwner)
+            if (isOwner || _isAdmin)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
                 title: const Text('Delete post', style: TextStyle(color: Colors.red)),
@@ -295,7 +310,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
 
   void _checkIfCreator() {
     final userId = _client.auth.currentUser?.id;
-    if (mounted) setState(() => _isCreator = widget.community['created_by'] == userId);
+    if (mounted) setState(() => _isCreator = _communityData['created_by'] == userId);
   }
 
   Future<void> _submitPost() async {
@@ -379,7 +394,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   }
 
   String _buildSubtitle() {
-    final book = widget.community['book'];
+    final book = _communityData['book'];
     if (book != null) return '$book • $_memberCount members';
     return '$_memberCount members';
   }
@@ -589,7 +604,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(widget.community['name'] ?? '',
+          Text(_communityData['name'] ?? '',
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
           Text(_buildSubtitle(), style: const TextStyle(color: Colors.grey, fontSize: 12)),
         ]),
@@ -607,13 +622,18 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
               onPressed: () async {
                 final updated = await Navigator.of(context).push<bool>(
                   MaterialPageRoute(builder: (_) => CommunitySettingsScreen(
-                    community: widget.community, isCreator: _isCreator)),
+                    community: _communityData, isCreator: _isCreator)),
                 );
-                if (updated == true && mounted) Navigator.of(context).pop(true);
+                if (updated == true && mounted) {
+                  await _reloadCommunityData();
+                  _loadPosts();
+                  _loadAnnouncements();
+                  _loadMemberCount();
+                }
               },
             ),
           // QR button — only for private church sub-groups, admin only
-          if (_isAdmin && widget.community['is_private'] == true && widget.community['church_id'] != null)
+          if (_isAdmin && _communityData['is_private'] == true && _communityData['church_id'] != null)
             IconButton(
               icon: const Icon(Icons.qr_code, color: Colors.white),
               tooltip: 'Show QR code',
@@ -829,7 +849,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                           final user = post['users'];
                           final displayName = user?['display_name'] ?? user?['username'] ?? 'Unknown';
                           final chapter = post['chapter'];
-                          final book = widget.community['book'];
+                          final book = _communityData['book'];
 
                           return GestureDetector(
                             onTap: () => Navigator.of(context).push(

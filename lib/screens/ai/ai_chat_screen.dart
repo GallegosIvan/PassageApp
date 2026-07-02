@@ -582,12 +582,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text(
-                      '$tokensRemaining / ${isPaid ? '50,000' : '2,000'} tokens remaining today',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                   Flexible(
+                    child: Text(
+                     '$tokensRemaining / ${isPaid ? '50,000' : '2,000'} tokens remaining today',
+                     style: const TextStyle(color: Colors.grey, fontSize: 12),
+                     overflow: TextOverflow.ellipsis,
                     ),
-                    if (!isPaid)
-                      GestureDetector(
+                   ),
+                   if (!isPaid)
+                    GestureDetector(
                         onTap: () async {
                           final upgraded = await UpgradeSheet.show(context);
                           if (upgraded == true && mounted) await _loadInitialData();

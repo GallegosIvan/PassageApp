@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/community_service.dart';
 import '../../services/church_service.dart';
 import 'community_detail_screen.dart';
@@ -300,13 +301,19 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                             community: community,
                             isMember: true,
                             onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => CommunityDetailScreen(community: community),
-                                ),
-                              );
-                              _loadMyCommunities();
-                            },
+  await _loadMyCommunities();
+  final communityId = community['id'];
+  final fresh = _myCommunities.firstWhere(
+    (c) => c['id'] == communityId,
+    orElse: () => community,
+  );
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => CommunityDetailScreen(community: fresh),
+    ),
+  );
+  await _loadMyCommunities();
+},
                           );
                         },
                       ),

@@ -4,7 +4,10 @@ import 'screens/splash_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'services/subscription_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 // ============================================================
 // MAIN.DART
@@ -27,6 +30,30 @@ Future<void> main() async {
     url: dotenv.get('SUPABASE_URL'),
     anonKey: dotenv.get('SUPABASE_ANON_KEY'),
   );
+
+  // Don't await — run in background so app launches immediately
+Firebase.initializeApp(
+  options: DefaultFirebaseOptions.currentPlatform,
+).then((_) async {
+  try {
+    await FirebaseMessaging.instance.requestPermission();
+    final fcmToken = await FirebaseMessaging.instance.getToken();
+    print('FCM Token: $fcmToken');
+    if (fcmToken != null) {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        await Supabase.instance.client
+            .from('users')
+            .update({'fcm_token': fcmToken})
+            .eq('id', userId);
+      }
+    }
+  } catch (e) {
+    print('Firebase background init error: $e');
+  }
+}).catchError((e) {
+  print('Firebase init error: $e');
+});
 
   await initializeRevenueCat();
 
