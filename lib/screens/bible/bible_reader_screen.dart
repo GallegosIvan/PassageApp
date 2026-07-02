@@ -1230,7 +1230,10 @@ class _VerseActionsSheetState extends State<_VerseActionsSheet> {
     buffer.writeln();
     buffer.writeln('Shared with Passage: Bible Study');
 
-    await Share.share(buffer.toString());
+    await Share.share(
+      buffer.toString(),
+      sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1),
+    );
   }
 
   @override

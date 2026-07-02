@@ -1033,13 +1033,30 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
   Widget _buildCommunityRow(Map<String, dynamic> community) {
     final isBibleStudy = community['is_bible_study'] == true;
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => isBibleStudy
-              ? CommunityDetailScreen(community: community)
-              : ChurchChatScreen(community: community),
-        ),
-      ),
+      onTap: () async {
+        if (isBibleStudy) {
+          Map<String, dynamic> freshCommunity = community;
+          try {
+            final result = await Supabase.instance.client
+                .from('communities')
+                .select()
+                .eq('id', community['id'])
+                .single();
+            freshCommunity = {...Map<String, dynamic>.from(result), 'role': community['role']};
+          } catch (e) {
+            print('fetch fresh church community error: $e');
+          }
+          if (context.mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => CommunityDetailScreen(community: freshCommunity)),
+            );
+          }
+        } else {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => ChurchChatScreen(community: community)),
+          );
+        }
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),

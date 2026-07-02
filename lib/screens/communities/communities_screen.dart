@@ -301,19 +301,27 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                             community: community,
                             isMember: true,
                             onTap: () async {
-  await _loadMyCommunities();
-  final communityId = community['id'];
-  final fresh = _myCommunities.firstWhere(
-    (c) => c['id'] == communityId,
-    orElse: () => community,
-  );
-  await Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => CommunityDetailScreen(community: fresh),
-    ),
-  );
-  await _loadMyCommunities();
-},
+                              Map<String, dynamic> freshCommunity = community;
+                              try {
+                                final result = await Supabase.instance.client
+                                    .from('communities')
+                                    .select()
+                                    .eq('id', community['id'])
+                                    .single();
+                                freshCommunity = {
+                                  ...Map<String, dynamic>.from(result),
+                                  'role': community['role'],
+                                };
+                              } catch (e) {
+                                print('fetch fresh community error: $e');
+                              }
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => CommunityDetailScreen(community: freshCommunity),
+                                ),
+                              );
+                              _loadMyCommunities();
+                            },
                           );
                         },
                       ),
