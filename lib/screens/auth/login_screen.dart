@@ -6,6 +6,8 @@ import 'landing_screen.dart';
 import '../home/main_screen.dart';
 import '../onboarding_flow.dart';
 import '../terms_gate_screen.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -61,6 +63,19 @@ class _LoginScreenState extends State<LoginScreen> {
         email: email,
         password: _passwordController.text.trim(),
       );
+      
+      // Link RevenueCat to this Supabase user so purchases are tracked correctly
+      if (!kIsWeb) {
+        try {
+          final userId = _client.auth.currentUser?.id;
+          if (userId != null) {
+            await Purchases.logIn(userId);
+            print('RevenueCat logIn called with: $userId');
+          }
+        } catch (e) {
+          print('RevenueCat logIn error: $e');
+        }
+      }
 
       if (!mounted) return;
 

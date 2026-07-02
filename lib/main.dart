@@ -18,7 +18,14 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 Future<void> initializeRevenueCat() async {
   if (kIsWeb) return;
   final apiKey = dotenv.get('REVENUECAT_API_KEY');
-  await Purchases.configure(PurchasesConfiguration(apiKey));
+  final config = PurchasesConfiguration(apiKey);
+  await Purchases.configure(config);
+  
+  // Set the app user ID to match Supabase user ID
+  final userId = Supabase.instance.client.auth.currentUser?.id;
+  if (userId != null) {
+    await Purchases.logIn(userId);
+  }
 }
 
 Future<void> main() async {

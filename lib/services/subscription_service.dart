@@ -60,24 +60,27 @@ class SubscriptionService {
   }
 
   // ── CHECK TRIAL ELIGIBILITY ────────────────────────────────
-  Future<bool> isTrialEligible() async {
-    if (kIsWeb) return false;
-    try {
-      final offerings = await Purchases.getOfferings();
-      final package = offerings.current?.annual ?? offerings.current?.monthly;
-      if (package == null) return true;
-
-      final eligibility = await Purchases.checkTrialOrIntroductoryPriceEligibility(
-        [package.storeProduct.identifier],
-      );
-      final result = eligibility[package.storeProduct.identifier];
-      return result?.status == IntroEligibilityStatus.introEligibilityStatusEligible;
-    } catch (e) {
-      print('isTrialEligible error: $e');
+Future<bool> isTrialEligible() async {
+  if (kIsWeb) return false;
+  try {
+    final offerings = await Purchases.getOfferings();
+    final package = offerings.current?.annual ?? offerings.current?.monthly;
+    if (package == null) {
+      print('isTrialEligible: no package found, returning true');
       return true;
     }
-  }
 
+    final eligibility = await Purchases.checkTrialOrIntroductoryPriceEligibility(
+      [package.storeProduct.identifier],
+    );
+    final result = eligibility[package.storeProduct.identifier];
+    print('isTrialEligible: status = ${result?.status}');
+    return result?.status == IntroEligibilityStatus.introEligibilityStatusEligible;
+  } catch (e) {
+    print('isTrialEligible error: $e');
+    return true;
+  }
+}
   // ── PURCHASE MONTHLY PLAN ─────────────────────────────────
   Future<bool> purchaseMonthly() async {
     if (kIsWeb) return false;

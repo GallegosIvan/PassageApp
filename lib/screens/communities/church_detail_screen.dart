@@ -1052,9 +1052,22 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
             );
           }
         } else {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => ChurchChatScreen(community: community)),
-          );
+          Map<String, dynamic> freshCommunity = community;
+          try {
+            final result = await Supabase.instance.client
+                .from('communities')
+                .select()
+                .eq('id', community['id'])
+                .single();
+            freshCommunity = {...Map<String, dynamic>.from(result), 'role': community['role']};
+          } catch (e) {
+            print('fetch fresh chat community error: $e');
+          }
+          if (context.mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => ChurchChatScreen(community: freshCommunity)),
+            );
+          }
         }
       },
       child: Container(
