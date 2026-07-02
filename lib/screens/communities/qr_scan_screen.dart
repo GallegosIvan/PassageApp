@@ -257,7 +257,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
           ],
         ),
         content: const Text(
-          'You can find this group on your church\'s page.',
+          'You can find this group in your Communities tab.',
           style: TextStyle(color: Colors.grey, fontSize: 13),
         ),
         actions: [

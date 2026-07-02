@@ -700,11 +700,11 @@ class _CommunitySettingsScreenState
                     // sub-groups only) ──────────────────────────
                     // Lets an admin add a specific church follower
                     // directly, without requiring a QR scan.
-                    if (_isChurchCommunity && _isPrivate) ...[
+                    if (_isPrivate) ...[
                       _sectionLabel('Add Member'),
                       const SizedBox(height: 4),
                       const Text(
-                        'Add a specific church follower to this group by username.',
+                        'Add someone directly by username, without requiring a QR scan.',
                         style: TextStyle(color: Colors.grey, fontSize: 13),
                       ),
                       const SizedBox(height: 12),

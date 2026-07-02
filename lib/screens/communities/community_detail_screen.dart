@@ -632,8 +632,8 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                 }
               },
             ),
-          // QR button — only for private church sub-groups, admin only
-          if (_isAdmin && _communityData['is_private'] == true && _communityData['church_id'] != null)
+          // QR button — for any private community, admin only
+          if (_isAdmin && _communityData['is_private'] == true)
             IconButton(
               icon: const Icon(Icons.qr_code, color: Colors.white),
               tooltip: 'Show QR code',
