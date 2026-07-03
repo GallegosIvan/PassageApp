@@ -139,12 +139,21 @@ class BibleService {
 
     final textBuffer = StringBuffer();
 
+    void appendText(String text) {
+      if (text.isEmpty) return;
+      final current = textBuffer.toString();
+      if (current.isNotEmpty && !current.endsWith(' ') && !text.startsWith(' ')) {
+        textBuffer.write(' ');
+      }
+      textBuffer.write(text);
+    }
+
     for (final part in verseContent) {
       if (part is String) {
-        textBuffer.write(part);
+        appendText(part);
       } else if (part is Map) {
         if (part['text'] != null) {
-          textBuffer.write(part['text']);
+          appendText(part['text'] as String);
         }
       }
     }

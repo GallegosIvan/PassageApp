@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/app_cache.dart';
 import '../auth/landing_screen.dart';
 import 'settings_screen.dart';
 import '../../widgets/upgrade_sheet.dart';
@@ -60,18 +61,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  Future<void> _loadProfile() async {
-    if (mounted) setState(() { _isLoading = true; _error = null; });
-
+  Future<void> _loadProfile({bool forceRefresh = false}) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
 
+    // Show cached data instantly then refresh in background
+    final cached = AppCache.instance.profileData;
+    if (cached != null && !forceRefresh) {
+      if (mounted) setState(() {
+        _profile = cached['profile'] as Map<String, dynamic>;
+        _subscription = cached['subscription'] as Map<String, dynamic>?;
+        _streak = cached['streak'] as int? ?? 0;
+        _displayNameController.text =
+            (_profile?['display_name'] ?? _profile?['username'] ?? '').toString();
+        _isLoading = false;
+      });
+      _fetchProfile(userId, showLoading: false);
+      return;
+    }
+
+    if (mounted) setState(() { _isLoading = true; _error = null; });
+    await _fetchProfile(userId, showLoading: true);
+  }
+
+  Future<void> _fetchProfile(String userId, {required bool showLoading}) async {
     try {
       final results = await Future.wait([
         _client
             .from('users')
-            .select(
-                'username, display_name, email, avatar_url, denomination, created_at')
+            .select('username, display_name, email, avatar_url, denomination, created_at')
             .eq('id', userId)
             .single(),
         _client
@@ -86,21 +104,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .maybeSingle(),
       ]);
 
+      final profile = results[0] as Map<String, dynamic>;
+      final subscription = results[1] as Map<String, dynamic>?;
+      final streakData = results[2] as Map<String, dynamic>?;
+      final streak = streakData?['streak_count'] as int? ?? 0;
+
+      AppCache.instance.setProfileData({
+        'profile': profile,
+        'subscription': subscription,
+        'streak': streak,
+      });
+
       if (mounted) {
-        final profile = results[0] as Map<String, dynamic>;
         setState(() {
           _profile = profile;
-          _subscription = results[1] as Map<String, dynamic>?;
-          final streakData = results[2] as Map<String, dynamic>?;
-          _streak = streakData?['streak_count'] as int? ?? 0;
+          _subscription = subscription;
+          _streak = streak;
           _displayNameController.text =
               profile['display_name'] ?? profile['username'] ?? '';
           _isLoading = false;
         });
       }
     } catch (e) {
-      print('loadProfile error: $e');
-      if (mounted) setState(() {
+      print('loadProfile error: \$e');
+      if (showLoading && mounted) setState(() {
         _error = 'Could not load your profile. Please check your connection.';
         _isLoading = false;
       });
@@ -228,6 +255,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
+              AppCache.instance.clear();
               await _client.auth.signOut();
               // Routes to LandingScreen, not directly to
               // SignUpScreen — logging out should land someone
@@ -273,7 +301,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 )
               : RefreshIndicator(
-              onRefresh: _loadProfile,
+              onRefresh: () async { AppCache.instance.invalidateProfileData(); await _loadProfile(forceRefresh: true); },
               color: Colors.white,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),

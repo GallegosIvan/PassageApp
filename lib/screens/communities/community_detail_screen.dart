@@ -1093,6 +1093,7 @@ class _ReplyScreenState extends State<_ReplyScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: const Text('Thread', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -1158,7 +1159,7 @@ class _ReplyScreenState extends State<_ReplyScreen> {
                     ),
         ),
         Container(
-          padding: EdgeInsets.only(left: 16, right: 16, top: 12, bottom: MediaQuery.of(context).viewInsets.bottom + 12),
+          padding: const EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 12),
           color: const Color(0xFF1A1A1A),
           child: Row(children: [
             Expanded(child: TextField(

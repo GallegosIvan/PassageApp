@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/bible_service.dart';
+import '../../services/app_cache.dart';
 import '../../services/bible_interaction_service.dart';
 import 'bible_reader_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -33,7 +34,17 @@ class _BibleChaptersScreenState extends State<BibleChaptersScreen> {
 
   Future<void> _loadData() async {
     final bookmarks = await _interactionService.getBookmarks();
-    final readChapters = await _loadReadChapters();
+    Set<int> readChapters;
+    final bookId = widget.book['id'] as String;
+    if (AppCache.instance.readChapters != null) {
+      readChapters = AppCache.instance.readChapters!
+          .where((k) => k.startsWith('${bookId}_'))
+          .map((k) => int.tryParse(k.split('_').last) ?? 0)
+          .where((c) => c > 0)
+          .toSet();
+    } else {
+      readChapters = await _loadReadChapters();
+    }
     if (mounted) {
       setState(() {
         _bookmarks = bookmarks;

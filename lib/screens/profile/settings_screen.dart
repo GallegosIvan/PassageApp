@@ -6,6 +6,7 @@ import 'admin_reports_screen.dart';
 import 'admin_feedback_screen.dart';
 import 'admin_restricted_users_screen.dart';
 import 'admin_appeals_screen.dart';
+import '../../services/app_cache.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -24,6 +25,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _obscureConfirm = true;
   bool _isAdmin = false;
   bool _isRestricted = false;
+  bool? _notifReplies;
+  bool? _notifAnnouncements;
+  bool? _notifStreak;
+  bool? _notifGroupChat;
 
   List<Map<String, dynamic>> _blockedUsers = [];
   bool _isLoadingBlocked = true;
@@ -39,6 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _checkIfAdmin();
     _loadBlockedUsers();
     _checkRestrictionStatus();
+    _loadNotifPrefs();
   }
 
   @override
@@ -46,6 +52,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadNotifPrefs() async {
+    try {
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) return;
+      final result = await _client
+          .from('users')
+          .select('notification_prefs')
+          .eq('id', userId)
+          .single();
+      final prefs = result['notification_prefs'] as Map<String, dynamic>? ?? {};
+      if (mounted) setState(() {
+        _notifReplies = prefs['replies'] as bool? ?? true;
+        _notifAnnouncements = prefs['announcements'] as bool? ?? true;
+        _notifStreak = prefs['streak'] as bool? ?? true;
+        _notifGroupChat = prefs['group_chat'] as bool? ?? true;
+      });
+    } catch (e) {
+      print('loadNotifPrefs error: \$e');
+    }
+  }
+
+  Future<void> _saveNotifPref(String key, bool value) async {
+    try {
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) return;
+      await _client.from('users').update({
+        'notification_prefs': {
+          'replies': key == 'replies' ? value : (_notifReplies ?? true),
+          'announcements': key == 'announcements' ? value : (_notifAnnouncements ?? true),
+          'streak': key == 'streak' ? value : (_notifStreak ?? true),
+          'group_chat': key == 'group_chat' ? value : (_notifGroupChat ?? true),
+        }
+      }).eq('id', userId);
+    } catch (e) {
+      print('saveNotifPref error: \$e');
+    }
   }
 
   Future<void> _checkIfAdmin() async {
@@ -191,6 +235,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       await _client.rpc('delete_own_account');
+      AppCache.instance.clear();
       await _client.auth.signOut();
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
@@ -351,13 +396,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 24),
 
-            _sectionLabel('Notifications'),
-            const SizedBox(height: 12),
-            _ToggleRow(icon: Icons.notifications_outlined, label: 'New replies to my posts', value: true, onChanged: (_) {}),
-            const SizedBox(height: 8),
-            _ToggleRow(icon: Icons.campaign_outlined, label: 'Community announcements', value: true, onChanged: (_) {}),
-            const SizedBox(height: 8),
-            _ToggleRow(icon: Icons.local_fire_department_outlined, label: 'Daily streak reminder', value: true, onChanged: (_) {}),
+            if (_notifReplies != null) ...[
+              _sectionLabel('Notifications'),
+              const SizedBox(height: 12),
+              _ToggleRow(icon: Icons.notifications_outlined, label: 'New replies to my posts', value: _notifReplies!, onChanged: (val) async { setState(() => _notifReplies = val); await _saveNotifPref('replies', val); }),
+              const SizedBox(height: 8),
+              _ToggleRow(icon: Icons.campaign_outlined, label: 'Community announcements', value: _notifAnnouncements!, onChanged: (val) async { setState(() => _notifAnnouncements = val); await _saveNotifPref('announcements', val); }),
+              const SizedBox(height: 8),
+              _ToggleRow(icon: Icons.chat_bubble_outline, label: 'Group chat messages', value: _notifGroupChat!, onChanged: (val) async { setState(() => _notifGroupChat = val); await _saveNotifPref('group_chat', val); }),
+              const SizedBox(height: 8),
+              _ToggleRow(icon: Icons.local_fire_department_outlined, label: 'Daily streak reminder', value: _notifStreak!, onChanged: (val) async { setState(() => _notifStreak = val); await _saveNotifPref('streak', val); }),
+            ],
 
             const SizedBox(height: 24),
 
@@ -573,6 +622,14 @@ class _ToggleRowState extends State<_ToggleRow> {
   void initState() {
     super.initState();
     _value = widget.value;
+  }
+
+  @override
+  void didUpdateWidget(_ToggleRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      setState(() => _value = widget.value);
+    }
   }
 
   @override

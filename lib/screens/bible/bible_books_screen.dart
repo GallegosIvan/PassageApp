@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/bible_service.dart';
+import '../../services/app_cache.dart';
 import '../../services/bible_interaction_service.dart';
 import 'bible_chapters_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -39,11 +40,16 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
     _searchController.addListener(_filterBooks);
   }
 
+  bool _initialLoadDone = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _loadBookmarks();
-    if (_books.isEmpty) _loadData();
+    if (!_initialLoadDone) {
+      _initialLoadDone = true;
+      _loadData();
+    }
   }
 
   @override
@@ -62,19 +68,43 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
     try {
       String translationId = 'BSB';
       try {
-        translationId = await _bibleService.getUserTranslationId();
+        if (AppCache.instance.preferredTranslation != null) {
+          translationId = AppCache.instance.preferredTranslation!;
+        } else {
+          translationId = await _bibleService.getUserTranslationId();
+          AppCache.instance.setPreferredTranslation(translationId);
+        }
       } catch (e) {
         print('Translation fallback: $e');
       }
 
       if (!mounted) return;
-      final books = await _bibleService.getBooks(translationId);
+      List<Map<String, dynamic>> books;
+      final cachedBooks = AppCache.instance.getBooks(translationId);
+      if (cachedBooks != null) {
+        books = cachedBooks;
+      } else {
+        books = await _bibleService.getBooks(translationId);
+        AppCache.instance.setBooks(translationId, books);
+      }
 
       if (!mounted) return;
       final bookmarks = await _interactionService.getBookmarks();
 
       if (!mounted) return;
-      final readCounts = await _loadReadChapterCounts();
+      Map<String, int> readCounts;
+      if (AppCache.instance.readChapters != null) {
+        // Build counts from cached read chapters
+        readCounts = {};
+        for (final key in AppCache.instance.readChapters!) {
+          final parts = key.split('_');
+          if (parts.length == 2) {
+            readCounts[parts[0]] = (readCounts[parts[0]] ?? 0) + 1;
+          }
+        }
+      } else {
+        readCounts = await _loadReadChapterCounts();
+      }
 
       if (!mounted) return;
       setState(() {
@@ -148,13 +178,18 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
   // truth for "what counts as a selectable translation."
   Future<void> _showTranslationPicker() async {
     if (_translations.isEmpty) {
-      setState(() => _isLoadingTranslations = true);
-      try {
-        _translations = await _bibleService.getAvailableTranslations();
-      } catch (e) {
-        print('Failed to load translations: $e');
+      if (AppCache.instance.bibleTranslations != null) {
+        _translations = AppCache.instance.bibleTranslations!;
+      } else {
+        setState(() => _isLoadingTranslations = true);
+        try {
+          _translations = await _bibleService.getAvailableTranslations();
+          AppCache.instance.setBibleTranslations(_translations);
+        } catch (e) {
+          print('Failed to load translations: $e');
+        }
+        setState(() => _isLoadingTranslations = false);
       }
-      setState(() => _isLoadingTranslations = false);
     }
 
     if (!mounted) return;
@@ -205,7 +240,13 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
 
     if (setAsPreferred == true) {
       await _bibleService.setUserTranslationId(newId);
+      AppCache.instance.setPreferredTranslation(newId);
+    } else {
+      // Session only — update cache so returning to this screen keeps the choice
+      AppCache.instance.setPreferredTranslation(newId);
     }
+
+    AppCache.instance.invalidateBooks(newId);
 
     setState(() {
       _translationId = newId;

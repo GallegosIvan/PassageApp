@@ -3,6 +3,7 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:async';
 import 'dart:convert';
 import '../../services/bible_service.dart';
+import '../../services/app_cache.dart';
 import '../../services/bible_interaction_service.dart';
 import '../../services/subscription_service.dart';
 import '../communities/community_detail_screen.dart';
@@ -81,6 +82,7 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
         'chapter': widget.chapterNumber,
         'read_at': DateTime.now().toIso8601String(),
       }, onConflict: 'user_id,book_id,chapter');
+      AppCache.instance.markChapterRead(widget.bookId, widget.chapterNumber);
       if (mounted) {
         setState(() => _isRead = true);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -118,6 +120,11 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
   }
 
   Future<void> _checkIfRead() async {
+    final cacheKey = '\${widget.bookId}_\${widget.chapterNumber}';
+    if (AppCache.instance.readChapters != null) {
+      if (mounted) setState(() => _isRead = AppCache.instance.readChapters!.contains(cacheKey));
+      return;
+    }
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
     try {
@@ -130,7 +137,7 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
           .maybeSingle();
       if (mounted) setState(() => _isRead = result != null);
     } catch (e) {
-      print('checkIfRead error: $e');
+      print('checkIfRead error: \$e');
     }
   }
 

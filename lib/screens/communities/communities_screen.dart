@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/community_service.dart';
 import '../../services/church_service.dart';
+import '../../services/app_cache.dart';
 import 'community_detail_screen.dart';
 import 'create_community_screen.dart';
 import 'church_detail_screen.dart';
@@ -78,20 +79,37 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     ]);
   }
 
-  Future<void> _loadMyCommunities() async {
+  Future<void> _loadMyCommunities({bool forceRefresh = false}) async {
     if (!mounted) return;
+    if (!forceRefresh && AppCache.instance.myCommunities != null) {
+      setState(() {
+        _myCommunities = AppCache.instance.myCommunities!;
+        _isLoadingMine = false;
+      });
+      return;
+    }
     setState(() => _isLoadingMine = true);
     final communities = await _communityService.getMyCommunities();
+    AppCache.instance.setMyCommunities(communities);
     if (mounted) setState(() {
       _myCommunities = communities;
       _isLoadingMine = false;
     });
   }
 
-  Future<void> _loadFollowedChurches() async {
+  Future<void> _loadFollowedChurches({bool forceRefresh = false}) async {
     if (!mounted) return;
+    // Use cache if available and not forcing refresh
+    if (!forceRefresh && AppCache.instance.myChurches != null) {
+      setState(() {
+        _followedChurches = AppCache.instance.myChurches!;
+        _isLoadingMyChurches = false;
+      });
+      return;
+    }
     setState(() => _isLoadingMyChurches = true);
     final churches = await _churchService.getFollowedChurches();
+    AppCache.instance.setMyChurches(churches);
     if (mounted) setState(() {
       _followedChurches = churches;
       _isLoadingMyChurches = false;
@@ -114,7 +132,8 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
   Future<void> _joinCommunity(String communityId) async {
     try {
       await _communityService.joinCommunity(communityId);
-      await _loadMyCommunities();
+      AppCache.instance.invalidateCommunities();
+      await _loadMyCommunities(forceRefresh: true);
       await _loadDiscoverCommunities(query: _communitySearchController.text);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -140,7 +159,8 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
   Future<void> _unfollowChurch(Map<String, dynamic> church) async {
     try {
       await _churchService.unfollowChurch(church['id']);
-      await _loadFollowedChurches();
+      AppCache.instance.invalidateChurches();
+      await _loadFollowedChurches(forceRefresh: true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

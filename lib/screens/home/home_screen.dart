@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/app_cache.dart';
 import '../../services/home_service.dart';
 import '../bible/bible_books_screen.dart';
 import '../bible/bible_reader_screen.dart';
@@ -56,22 +57,60 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _loadHomeData() async {
+  Future<void> _loadHomeData({bool forceRefresh = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
 
+    // If we have cached home data, show it instantly then refresh in background
+    final cached = AppCache.instance.homeData;
+    if (cached != null && !forceRefresh) {
+      setState(() {
+        _profile = cached['profile'] as Map<String, dynamic>?;
+        _streak = cached['streak'] as int;
+        _daysRead = List<String>.from(cached['daysRead'] as List);
+        _announcements = List<Map<String, dynamic>>.from(cached['announcements'] as List);
+        _verseOfDay = cached['verseOfDay'] as Map<String, dynamic>;
+        _isLoading = false;
+      });
+      // Fetch fresh data silently in background
+      _fetchAndCacheHomeData(showLoading: false);
+      return;
+    }
+
+    // First open — show spinner and wait
+    setState(() { _isLoading = true; _error = null; });
+    await _fetchAndCacheHomeData(showLoading: true);
+  }
+
+  Future<void> _fetchAndCacheHomeData({required bool showLoading}) async {
     try {
       await _homeService.updateStreak();
 
-      final profile = await _homeService.getUserProfile();
-      final streak = await _homeService.getStreak();
-      final daysRead = await _homeService.getDaysReadThisWeek();
-      final announcements = await _homeService.getAnnouncements();
-      final translationId = await _bibleService.getUserTranslationId();
+      final results = await Future.wait([
+        _homeService.getUserProfile(),
+        _homeService.getStreak(),
+        _homeService.getDaysReadThisWeek(),
+        _homeService.getAnnouncements(),
+        _bibleService.getUserTranslationId(),
+      ]);
+
+      final profile = results[0] as Map<String, dynamic>?;
+      final streak = results[1] as int;
+      final daysRead = List<String>.from(results[2] as List);
+      final announcements = List<Map<String, dynamic>>.from(results[3] as List);
+      final translationId = results[4] as String;
       final verse = await _homeService.getVerseOfTheDay(translationId);
+
+      AppCache.instance.setStreakCount(streak);
+      AppCache.instance.setHomeData(
+        profile: profile,
+        streak: streak,
+        daysRead: daysRead,
+        announcements: announcements,
+        verseOfDay: verse,
+      );
+      if (AppCache.instance.preferredTranslation == null) {
+        AppCache.instance.setPreferredTranslation(translationId);
+      }
 
       if (mounted) {
         setState(() {
@@ -83,17 +122,13 @@ class _HomeScreenState extends State<HomeScreen> {
           _isLoading = false;
         });
 
-        // Positive-moment rate prompt trigger: hitting a streak
-        // milestone is a genuine satisfaction moment. Only fires
-        // on exact milestone days, not every day at or past them,
-        // and RateUsDialog silently no-ops if not eligible.
         if (streak == 3 || streak == 7 || streak == 30 || streak == 100) {
           RateUsDialog.maybeShow(context);
         }
       }
     } catch (e) {
       print('loadHomeData error: $e');
-      if (mounted) {
+      if (showLoading && mounted) {
         setState(() {
           _error = 'Could not load your home screen. Please check your connection.';
           _isLoading = false;
@@ -101,6 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
   }
+
 
   // ── OPEN VERSE OF THE DAY ───────────────────────────────────
   // Navigates directly to the exact book/chapter the verse of the
@@ -243,7 +279,9 @@ class _HomeScreenState extends State<HomeScreen> {
               : SafeArea(
                   child: RefreshIndicator(
                     onRefresh: () async {
-                      await _loadHomeData();
+                      AppCache.instance.invalidateHomeData();
+      AppCache.instance.invalidateHomeData();
+      await _loadHomeData(forceRefresh: true);
                       await _checkRestrictionStatus();
                     },
                     color: Colors.white,

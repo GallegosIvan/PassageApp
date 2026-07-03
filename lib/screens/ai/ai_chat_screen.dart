@@ -3,6 +3,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../services/ai_service.dart';
 import '../../services/bible_service.dart';
+import '../../services/app_cache.dart';
 import '../../widgets/upgrade_sheet.dart';
 import '../bible/bible_reader_screen.dart';
 
@@ -140,7 +141,21 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Future<void> _loadInitialData() async {
-    setState(() => _isLoading = true);
+    // Show cached conversations instantly if available
+    final cachedConvos = AppCache.instance.aiConversations;
+    if (cachedConvos != null) {
+      setState(() {
+        _conversations = cachedConvos;
+        _isLoading = false;
+      });
+      if (cachedConvos.isNotEmpty) {
+        _loadConversation(cachedConvos.first['id'] as String);
+      }
+    } else {
+      setState(() => _isLoading = true);
+    }
+
+    // Always fetch token usage fresh (rate limits)
     final results = await Future.wait([
       _aiService.getTokenUsage(),
       _bibleService.getUserTranslationId(),
@@ -151,6 +166,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final isPaid = tokenUsage['paid'] as bool? ?? false;
 
     final conversations = await _aiService.getConversations(isPaid: isPaid);
+    AppCache.instance.setAiConversations(conversations);
 
     if (mounted) {
       setState(() {
@@ -160,10 +176,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
         _isLoading = false;
       });
 
-      if (conversations.isNotEmpty) {
-        _loadConversation(conversations.first['id'] as String);
-      } else {
-        _startNewConversation();
+      if (cachedConvos == null) {
+        if (conversations.isNotEmpty) {
+          _loadConversation(conversations.first['id'] as String);
+        } else {
+          _startNewConversation();
+        }
       }
     }
   }
