@@ -256,6 +256,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
               AppCache.instance.clear();
+              try {
+                final userId = _client.auth.currentUser?.id;
+                if (userId != null) {
+                  await _client.from('users').update({'fcm_token': null}).eq('id', userId);
+                }
+              } catch (_) {}
               await _client.auth.signOut();
               // Routes to LandingScreen, not directly to
               // SignUpScreen — logging out should land someone

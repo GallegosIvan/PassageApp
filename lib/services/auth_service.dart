@@ -31,6 +31,12 @@ class AuthService {
   }
 
   Future<void> logOut() async {
+    try {
+      final userId = _client.auth.currentUser?.id;
+      if (userId != null) {
+        await _client.from('users').update({'fcm_token': null}).eq('id', userId);
+      }
+    } catch (_) {}
     await _client.auth.signOut();
   }
 

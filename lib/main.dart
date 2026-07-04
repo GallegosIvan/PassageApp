@@ -40,6 +40,20 @@ Future<void> _handleNotificationTap(RemoteMessage message) async {
     } catch (e) {
       print('notification nav community error: $e');
     }
+  } else if (type == 'announcement' && churchId != null) {
+    // Church-level announcement (community_id is null)
+    try {
+      final result = await Supabase.instance.client
+          .from('churches')
+          .select('*, church_followers(count)')
+          .eq('id', churchId)
+          .single();
+      nav.push(MaterialPageRoute(
+        builder: (_) => ChurchDetailScreen(church: Map<String, dynamic>.from(result)),
+      ));
+    } catch (e) {
+      print('notification nav church announcement error: $e');
+    }
   } else if (type == 'church_message' && communityId != null) {
     try {
       final result = await Supabase.instance.client
@@ -117,6 +131,33 @@ Firebase.initializeApp(
       }
     }
 
+    // Save token whenever FCM rotates it (e.g. after a new build)
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        await Supabase.instance.client
+            .from('users')
+            .update({'fcm_token': newToken})
+            .eq('id', userId);
+      }
+    });
+
+    // Save token on session restore — covers the async gap where currentUser
+    // is null when Firebase first initializes
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+      if (data.event == AuthChangeEvent.signedIn ||
+          data.event == AuthChangeEvent.tokenRefreshed) {
+        final token = await FirebaseMessaging.instance.getToken();
+        final uid = data.session?.user.id;
+        if (token != null && uid != null) {
+          await Supabase.instance.client
+              .from('users')
+              .update({'fcm_token': token})
+              .eq('id', uid);
+        }
+      }
+    });
+
     // Show banners/badges/sound even when app is in the foreground (iOS)
     await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
       alert: true,
@@ -130,8 +171,12 @@ Firebase.initializeApp(
     // Cold start: user taps notification to launch app from killed state
     final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
     if (initialMessage != null) {
-      // Wait for splash screen + auth navigation to complete before pushing
-      await Future.delayed(const Duration(seconds: 4));
+      // Wait for navigator key to be mounted, then extra buffer for auth flow
+      for (int i = 0; i < 50; i++) {
+        if (navigatorKey.currentState != null) break;
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+      await Future.delayed(const Duration(seconds: 2));
       await _handleNotificationTap(initialMessage);
     }
   } catch (e) {
