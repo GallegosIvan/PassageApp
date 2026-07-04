@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_app_badger/flutter_app_badger.dart';
 import '../../services/community_service.dart';
 import '../../services/church_service.dart';
 import '../../services/app_cache.dart';
@@ -110,7 +109,6 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
           .eq('is_read', false);
       final count = (result as List).length;
       if (mounted) setState(() => _unreadNotifCount = count);
-      FlutterAppBadger.updateBadgeCount(count);
     } catch (e) {
       print('loadUnreadNotifCount error: \$e');
     }
