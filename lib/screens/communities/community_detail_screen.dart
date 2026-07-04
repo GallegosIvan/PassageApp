@@ -753,8 +753,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
           ),
 
         if (_announcements.isNotEmpty)
-          Container(
-            color: const Color(0xFF1A1A1A),
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Row(children: [
@@ -773,47 +772,62 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                 final timeAgo = _timeAgo(a['created_at']);
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.black, borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.white.withOpacity(0.08)),
+                    color: const Color(0xFF141414),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white12),
                   ),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      const Icon(Icons.campaign_outlined, color: Colors.white, size: 14),
-                      const SizedBox(width: 6),
-                      Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-                      const Spacer(),
-                      Text(timeAgo, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                      if (_isAdmin) ...[
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () => showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              backgroundColor: const Color(0xFF1A1A1A),
-                              title: const Text('Delete announcement?', style: TextStyle(color: Colors.white)),
-                              content: const Text('This cannot be undone.', style: TextStyle(color: Colors.grey)),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(context),
-                                    child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
-                                TextButton(
-                                  onPressed: () async {
-                                    Navigator.pop(context);
-                                    await _communityService.deleteAnnouncement(a['id']);
-                                    _loadAnnouncements();
-                                  },
-                                  child: const Text('Delete', style: TextStyle(color: Colors.red)),
-                                ),
-                              ],
-                            ),
-                          ),
-                          child: const Icon(Icons.delete_outline, color: Colors.grey, size: 16),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                      child: Text(
+                        a['content'] ?? '',
+                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500, height: 1.55),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF1E1E1E),
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(12),
+                          bottomRight: Radius.circular(12),
                         ),
-                      ],
-                    ]),
-                    const SizedBox(height: 8),
-                    Text(a['content'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5)),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.campaign_outlined, color: Colors.grey, size: 13),
+                        const SizedBox(width: 5),
+                        Text(name, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w500)),
+                        const Spacer(),
+                        Text(timeAgo, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        if (_isAdmin) ...[
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () => showDialog(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                backgroundColor: const Color(0xFF1A1A1A),
+                                title: const Text('Delete announcement?', style: TextStyle(color: Colors.white)),
+                                content: const Text('This cannot be undone.', style: TextStyle(color: Colors.grey)),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(context),
+                                      child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+                                  TextButton(
+                                    onPressed: () async {
+                                      Navigator.pop(context);
+                                      await _communityService.deleteAnnouncement(a['id']);
+                                      _loadAnnouncements();
+                                    },
+                                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            child: const Icon(Icons.delete_outline, color: Colors.grey, size: 16),
+                          ),
+                        ],
+                      ]),
+                    ),
                   ]),
                 );
               }),

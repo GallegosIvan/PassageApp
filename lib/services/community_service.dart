@@ -645,19 +645,37 @@ class CommunityService {
     try {
       final response = await _client
           .from('community_members')
-          .select('community_id, communities(id, name, book, church_id, is_bible_study)')
+          .select('community_id, communities(id, name, book, church_id, is_bible_study, churches(name))')
           .eq('user_id', userId)
           .order('joined_at', ascending: false);
 
       return List<Map<String, dynamic>>.from(
         response
-            .where((m) => m['communities']['church_id'] == null)
+            .where((m) => m['communities'] != null)
             .map((m) => Map<String, dynamic>.from(m['communities'])),
       );
     } catch (e) {
       print('getMyCommunitiesForSharing error: $e');
       return [];
     }
+  }
+
+  Future<void> shareVerseToGroupChat({
+    required String communityId,
+    required String verseRef,
+    required String verseText,
+    String? comment,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw Exception('Not logged in');
+    final content = comment != null && comment.isNotEmpty
+        ? '$comment\n\n"$verseText"\n— $verseRef'
+        : '"$verseText"\n— $verseRef';
+    await _client.from('church_messages').insert({
+      'community_id': communityId,
+      'user_id': userId,
+      'content': content,
+    });
   }
 
   // ── REGENERATE SUB-GROUP QR TOKEN ─────────────────────────

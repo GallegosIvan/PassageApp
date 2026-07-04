@@ -1402,20 +1402,44 @@ class _ShareToCommunitySheet extends StatefulWidget {
 
 class _ShareToCommunitySheetState extends State<_ShareToCommunitySheet> {
   List<Map<String, dynamic>> _communities = [];
+  List<Map<String, dynamic>> _filtered = [];
   Map<String, dynamic>? _selectedCommunity;
   final _commentController = TextEditingController();
+  final _searchController = TextEditingController();
   bool _isLoading = true;
   bool _isPosting = false;
 
   @override
-  void initState() { super.initState(); _loadCommunities(); }
+  void initState() {
+    super.initState();
+    _loadCommunities();
+    _searchController.addListener(_onSearch);
+  }
 
   @override
-  void dispose() { _commentController.dispose(); super.dispose(); }
+  void dispose() {
+    _commentController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearch() {
+    final q = _searchController.text.toLowerCase();
+    setState(() {
+      _filtered = q.isEmpty
+          ? _communities
+          : _communities.where((c) {
+              final name = (c['name'] as String? ?? '').toLowerCase();
+              final church = (c['churches']?['name'] as String? ?? '').toLowerCase();
+              final book = (c['book'] as String? ?? '').toLowerCase();
+              return name.contains(q) || church.contains(q) || book.contains(q);
+            }).toList();
+    });
+  }
 
   Future<void> _loadCommunities() async {
     final communities = await widget.communityService.getMyCommunitiesForSharing();
-    if (mounted) setState(() { _communities = communities; _isLoading = false; });
+    if (mounted) setState(() { _communities = communities; _filtered = communities; _isLoading = false; });
   }
 
   // ── CHECK BOOK MATCH ────────────────────────────────────────
@@ -1456,22 +1480,34 @@ class _ShareToCommunitySheetState extends State<_ShareToCommunitySheet> {
     return confirmed ?? false;
   }
 
+  bool _isGroupChat(Map<String, dynamic> community) =>
+      community['church_id'] != null && community['is_bible_study'] != true;
+
   Future<void> _share() async {
     if (_selectedCommunity == null) return;
 
-    if (_isBookMismatch()) {
+    if (!_isGroupChat(_selectedCommunity!) && _isBookMismatch()) {
       final proceed = await _confirmMismatch();
       if (!proceed) return;
     }
 
     setState(() => _isPosting = true);
     try {
-      await widget.communityService.shareVerseToCommunity(
-        communityId: _selectedCommunity!['id'], verseRef: widget.verseRef,
-        verseText: widget.verse['text'] ?? '',
-        chapter: widget.chapter,
-        comment: _commentController.text.trim().isEmpty ? null : _commentController.text.trim(),
-      );
+      if (_isGroupChat(_selectedCommunity!)) {
+        await widget.communityService.shareVerseToGroupChat(
+          communityId: _selectedCommunity!['id'],
+          verseRef: widget.verseRef,
+          verseText: widget.verse['text'] ?? '',
+          comment: _commentController.text.trim().isEmpty ? null : _commentController.text.trim(),
+        );
+      } else {
+        await widget.communityService.shareVerseToCommunity(
+          communityId: _selectedCommunity!['id'], verseRef: widget.verseRef,
+          verseText: widget.verse['text'] ?? '',
+          chapter: widget.chapter,
+          comment: _commentController.text.trim().isEmpty ? null : _commentController.text.trim(),
+        );
+      }
       widget.onDone();
     } catch (e) {
       if (mounted) {
@@ -1500,17 +1536,68 @@ class _ShareToCommunitySheetState extends State<_ShareToCommunitySheet> {
     ]);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      TextField(
+        controller: _searchController,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: 'Search communities...', hintStyle: const TextStyle(color: Color(0xFF9090A0)),
+          prefixIcon: const Icon(Icons.search, color: Color(0xFF9090A0), size: 20),
+          filled: true, fillColor: const Color(0xFF0F0F1A),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
+      const SizedBox(height: 8),
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        constraints: const BoxConstraints(maxHeight: 180),
         decoration: BoxDecoration(color: const Color(0xFF0F0F1A), borderRadius: BorderRadius.circular(12)),
-        child: DropdownButtonHideUnderline(child: DropdownButton<Map<String, dynamic>>(
-          value: _selectedCommunity,
-          hint: const Text('Select a community', style: TextStyle(color: Color(0xFF9090A0))),
-          dropdownColor: const Color(0xFF1C1C2E), isExpanded: true,
-          style: const TextStyle(color: Colors.white),
-          items: _communities.map((c) => DropdownMenuItem(value: c, child: Text(c['book'] != null ? '${c['name']} — ${c['book']}' : c['name'] ?? '', overflow: TextOverflow.ellipsis))).toList(),
-          onChanged: (val) => setState(() => _selectedCommunity = val),
-        )),
+        child: _filtered.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('No communities found', style: TextStyle(color: Color(0xFF9090A0), fontSize: 13)),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                itemCount: _filtered.length,
+                itemBuilder: (context, i) {
+                  final c = _filtered[i];
+                  final isChurch = c['church_id'] != null;
+                  final churchName = c['churches']?['name'] as String?;
+                  final isChat = isChurch && c['is_bible_study'] != true;
+                  final String subtitle;
+                  if (isChat) {
+                    subtitle = churchName != null ? '$churchName · Group Chat' : 'Group Chat';
+                  } else if (isChurch && churchName != null) {
+                    subtitle = c['book'] != null ? '$churchName · ${c['book']}' : churchName;
+                  } else {
+                    subtitle = c['book'] as String? ?? '';
+                  }
+                  final selected = _selectedCommunity?['id'] == c['id'];
+                  return InkWell(
+                    onTap: () => setState(() => _selectedCommunity = c),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: selected ? Colors.white12 : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(children: [
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(c['name'] ?? '', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: selected ? FontWeight.w600 : FontWeight.normal)),
+                          if (subtitle.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(subtitle, style: const TextStyle(color: Color(0xFF9090A0), fontSize: 12)),
+                          ],
+                        ])),
+                        if (selected) const Icon(Icons.check, color: Colors.white, size: 16),
+                      ]),
+                    ),
+                  );
+                },
+              ),
       ),
       const SizedBox(height: 12),
       TextField(
