@@ -19,7 +19,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _homeService = HomeService();
   final _bibleService = BibleService();
   final _client = Supabase.instance.client;
@@ -33,15 +33,75 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   bool _isRestricted = false;
   bool _isNavigatingToVerse = false;
+  RealtimeChannel? _communityChannel;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadHomeData();
     _checkRestrictionStatus();
+    _subscribeToCommunityChanges();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       StrikeWarningDialog.checkAndShow(context);
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (_communityChannel != null) {
+      Supabase.instance.client.removeChannel(_communityChannel!);
+    }
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      AppCache.instance.invalidateHomeData();
+      _loadHomeData(forceRefresh: true);
+    }
+  }
+
+  void _subscribeToCommunityChanges() {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+    _communityChannel = _client
+        .channel('home_community_changes_$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'community_members',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (_) {
+            AppCache.instance.invalidateHomeData();
+            _loadHomeData(forceRefresh: true);
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'communities',
+          callback: (_) {
+            AppCache.instance.invalidateHomeData();
+            _loadHomeData(forceRefresh: true);
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'communities',
+          callback: (_) {
+            AppCache.instance.invalidateHomeData();
+            _loadHomeData(forceRefresh: true);
+          },
+        )
+        .subscribe();
   }
 
   // ── CHECK RESTRICTION STATUS ───────────────────────────────

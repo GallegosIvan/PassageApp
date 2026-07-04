@@ -42,6 +42,7 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
   bool _showFilters = false;
   int _unreadNotifCount = 0;
   RealtimeChannel? _notifChannel;
+  RealtimeChannel? _communityChannel;
 
   final List<String> _books = [
     'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy',
@@ -70,6 +71,7 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     _loadAll();
     _loadUnreadNotifCount();
     _subscribeToNotifications();
+    _subscribeToCommunityChanges();
     _communitySearchController.addListener(() {
       _loadDiscoverCommunities(query: _communitySearchController.text);
     });
@@ -82,6 +84,9 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     if (_notifChannel != null) {
       Supabase.instance.client.removeChannel(_notifChannel!);
     }
+    if (_communityChannel != null) {
+      Supabase.instance.client.removeChannel(_communityChannel!);
+    }
     _tabController.dispose();
     _communitySearchController.dispose();
     super.dispose();
@@ -91,6 +96,8 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadUnreadNotifCount();
+      _loadMyCommunities(forceRefresh: true);
+      _loadFollowedChurches(forceRefresh: true);
     }
   }
 
@@ -109,6 +116,40 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
             value: userId,
           ),
           callback: (_) => _loadUnreadNotifCount(),
+        )
+        .subscribe();
+  }
+
+  void _subscribeToCommunityChanges() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    _communityChannel = Supabase.instance.client
+        .channel('community_changes_$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'community_members',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (_) {
+            _loadMyCommunities(forceRefresh: true);
+            _loadFollowedChurches(forceRefresh: true);
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'communities',
+          callback: (_) => _loadMyCommunities(forceRefresh: true),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'communities',
+          callback: (_) => _loadMyCommunities(forceRefresh: true),
         )
         .subscribe();
   }
