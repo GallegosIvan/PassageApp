@@ -82,6 +82,8 @@ class RatingPromptService {
       final available = await _inAppReview.isAvailable();
       if (available) {
         await _inAppReview.requestReview();
+      } else {
+        await openStoreListing();
       }
     } catch (e) {
       print('requestNativeReview error: $e');
