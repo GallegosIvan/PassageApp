@@ -98,6 +98,13 @@ Firebase.initializeApp(
       }
     }
 
+    // Show banners/badges/sound even when app is in the foreground (iOS)
+    await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
     // Background → foreground: user taps notification while app is running
     FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
 

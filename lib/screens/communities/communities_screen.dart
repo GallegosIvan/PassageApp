@@ -40,6 +40,7 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
   String? _filterBook;
   bool _showFilters = false;
   int _unreadNotifCount = 0;
+  RealtimeChannel? _notifChannel;
 
   final List<String> _books = [
     'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy',
@@ -63,6 +64,7 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     _tabController = TabController(length: 3, vsync: this);
     _loadAll();
     _loadUnreadNotifCount();
+    _subscribeToNotifications();
     _communitySearchController.addListener(() {
       _loadDiscoverCommunities(query: _communitySearchController.text);
     });
@@ -70,9 +72,31 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
 
   @override
   void dispose() {
+    if (_notifChannel != null) {
+      Supabase.instance.client.removeChannel(_notifChannel!);
+    }
     _tabController.dispose();
     _communitySearchController.dispose();
     super.dispose();
+  }
+
+  void _subscribeToNotifications() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    _notifChannel = Supabase.instance.client
+        .channel('notif_badge_$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'notifications',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (_) => _loadUnreadNotifCount(),
+        )
+        .subscribe();
   }
 
   Future<void> _loadUnreadNotifCount() async {
@@ -517,7 +541,10 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                   child: ElevatedButton.icon(
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const QrScanScreen()),
-                    ).then((_) => _loadFollowedChurches()),
+                    ).then((_) {
+                      AppCache.instance.invalidateChurches();
+                      _loadFollowedChurches(forceRefresh: true);
+                    }),
                     icon: const Icon(Icons.qr_code_scanner),
                     label: const Text('Scan church QR code',
                         style: TextStyle(fontWeight: FontWeight.w600)),
@@ -564,7 +591,8 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                                     await Navigator.of(context).push(
                                       MaterialPageRoute(builder: (_) => ChurchDetailScreen(church: church)),
                                     );
-                                    _loadFollowedChurches();
+                                    AppCache.instance.invalidateChurches();
+                                    _loadFollowedChurches(forceRefresh: true);
                                   },
                                   onLeave: () => _unfollowChurch(church),
                                 );
