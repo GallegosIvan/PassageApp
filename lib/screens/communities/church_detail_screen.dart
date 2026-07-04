@@ -20,11 +20,12 @@ class ChurchDetailScreen extends StatefulWidget {
   State<ChurchDetailScreen> createState() => _ChurchDetailScreenState();
 }
 
-class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTickerProviderStateMixin {
+class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final _churchService = ChurchService();
   final _communityService = CommunityService();
   final _client = Supabase.instance.client;
   late TabController _tabController;
+  RealtimeChannel? _communityChannel;
 
   List<Map<String, dynamic>> _announcements = [];
   List<Map<String, dynamic>> _churchCommunities = [];
@@ -47,12 +48,50 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 2, vsync: this);
     _loadData();
+    _subscribeToChurchCommunityChanges();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _refreshChurchCommunities();
+    }
+  }
+
+  Future<void> _refreshChurchCommunities() async {
+    final communities = await _communityService.getChurchCommunities(widget.church['id']);
+    if (mounted) setState(() => _churchCommunities = communities);
+  }
+
+  void _subscribeToChurchCommunityChanges() {
+    _communityChannel = _client
+        .channel('church_communities_${widget.church['id']}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'communities',
+          callback: (payload) {
+            if (mounted) _refreshChurchCommunities();
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'communities',
+          callback: (payload) {
+            if (mounted) _refreshChurchCommunities();
+          },
+        )
+        .subscribe();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _communityChannel?.unsubscribe();
     _tabController.dispose();
     super.dispose();
   }
@@ -526,7 +565,10 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
                     ),
                   ),
                 );
-                if (created == true && mounted) _loadData();
+                if (created == true && mounted) {
+                  await _loadBrowsableCommunities();
+                  _tabController.animateTo(1);
+                }
               },
             ),
           if (_isCreator || _isAdmin)
@@ -1037,9 +1079,13 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
             print('fetch fresh church community error: $e');
           }
           if (context.mounted) {
-            Navigator.of(context).push(
+            final result = await Navigator.of(context).push<dynamic>(
               MaterialPageRoute(builder: (_) => CommunityDetailScreen(community: freshCommunity)),
             );
+            if (result == 'left' && mounted) {
+              await Future.wait([_refreshChurchCommunities(), _loadBrowsableCommunities()]);
+              _tabController.animateTo(1);
+            }
           }
         } else {
           Map<String, dynamic> freshCommunity = community;
@@ -1054,9 +1100,13 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
             print('fetch fresh chat community error: $e');
           }
           if (context.mounted) {
-            Navigator.of(context).push(
+            final result = await Navigator.of(context).push<dynamic>(
               MaterialPageRoute(builder: (_) => ChurchChatScreen(community: freshCommunity)),
             );
+            if (result == 'left' && mounted) {
+              await Future.wait([_refreshChurchCommunities(), _loadBrowsableCommunities()]);
+              _tabController.animateTo(1);
+            }
           }
         }
       },

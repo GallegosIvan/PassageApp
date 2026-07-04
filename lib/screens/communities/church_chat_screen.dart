@@ -69,6 +69,47 @@ class _ChurchChatScreenState extends State<ChurchChatScreen> {
     if (mounted) setState(() => _isAdmin = isAdmin);
   }
 
+  Future<void> _leaveCommunity() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Leave group chat?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'You will no longer have access to this group chat.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Leave', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await _communityService.leaveCommunity(widget.community['id']);
+      if (mounted) Navigator.of(context).pop('left');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().contains('creator_cannot_leave')
+                ? 'The creator cannot leave the group chat.'
+                : 'Failed to leave group chat.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _showQrSheet() async {
     final token = await _communityService.getSubGroupQrToken(widget.community['id']);
     if (token == null) {
@@ -173,6 +214,28 @@ class _ChurchChatScreenState extends State<ChurchChatScreen> {
           schema: 'public',
           table: 'church_messages',
           callback: (payload) => _loadMessages(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'communities',
+          callback: (payload) {
+            if (mounted) Navigator.of(context).pop(true);
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'communities',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: widget.community['id'],
+          ),
+          callback: (payload) {
+            // Community settings changed — reload so name/privacy etc. stays fresh.
+            if (mounted) setState(() {});
+          },
         )
         .subscribe();
   }
@@ -383,6 +446,12 @@ class _ChurchChatScreenState extends State<ChurchChatScreen> {
               icon: const Icon(Icons.qr_code, color: Colors.white),
               tooltip: 'Show join QR code',
               onPressed: _showQrSheet,
+            ),
+          if (widget.community['created_by'] != _currentUserId)
+            IconButton(
+              icon: const Icon(Icons.exit_to_app, color: Colors.redAccent),
+              tooltip: 'Leave group chat',
+              onPressed: _leaveCommunity,
             ),
           if (_isAdmin)
             IconButton(

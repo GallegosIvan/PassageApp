@@ -427,6 +427,47 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   // Shown to admins of private church sub-groups so they can
   // invite people by showing them a QR code to scan. Same pattern
   // as _showQrSheet in ChurchDetailScreen.
+  Future<void> _leaveCommunity() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Leave community?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'You will no longer have access to this community.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Leave', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await _communityService.leaveCommunity(widget.community['id']);
+      if (mounted) Navigator.of(context).pop('left');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().contains('creator_cannot_leave')
+                ? 'The creator cannot leave the community.'
+                : 'Failed to leave community.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _showSubGroupQrSheet() async {
     final token = await _communityService.getSubGroupQrToken(widget.community['id']);
     if (token == null) {
@@ -674,6 +715,12 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
               if (!_showSearch) { _searchController.clear(); _filteredPosts = _posts; }
             },
           ),
+          if (!_isCreator)
+            IconButton(
+              icon: const Icon(Icons.exit_to_app, color: Colors.redAccent),
+              tooltip: 'Leave community',
+              onPressed: _leaveCommunity,
+            ),
         ],
       ),
       body: Column(children: [

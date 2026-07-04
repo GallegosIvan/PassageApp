@@ -455,12 +455,18 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                               } catch (e) {
                                 print('fetch fresh community error: $e');
                               }
-                              await Navigator.of(context).push(
+                              final result = await Navigator.of(context).push<dynamic>(
                                 MaterialPageRoute(
                                   builder: (_) => CommunityDetailScreen(community: freshCommunity),
                                 ),
                               );
-                              _loadMyCommunities();
+                              if (result == 'left') {
+                                _loadMyCommunities(forceRefresh: true);
+                                _loadDiscoverCommunities();
+                                _tabController.animateTo(2);
+                              } else {
+                                _loadMyCommunities();
+                              }
                             },
                           );
                         },
