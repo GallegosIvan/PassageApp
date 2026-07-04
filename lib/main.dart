@@ -8,6 +8,48 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'services/subscription_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'screens/communities/community_detail_screen.dart';
+import 'screens/communities/church_detail_screen.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+Future<void> _handleNotificationTap(RemoteMessage message) async {
+  final data = message.data;
+  final type = data['type'] as String?;
+  final communityId = data['community_id'] as String?;
+  final churchId = data['church_id'] as String?;
+
+  final nav = navigatorKey.currentState;
+  if (nav == null) return;
+
+  if ((type == 'reply' || type == 'announcement') && communityId != null) {
+    try {
+      final result = await Supabase.instance.client
+          .from('communities')
+          .select()
+          .eq('id', communityId)
+          .single();
+      nav.push(MaterialPageRoute(
+        builder: (_) => CommunityDetailScreen(community: Map<String, dynamic>.from(result)),
+      ));
+    } catch (e) {
+      print('notification nav community error: $e');
+    }
+  } else if (type == 'church_message' && churchId != null) {
+    try {
+      final result = await Supabase.instance.client
+          .from('churches')
+          .select('*, church_followers(count)')
+          .eq('id', churchId)
+          .single();
+      nav.push(MaterialPageRoute(
+        builder: (_) => ChurchDetailScreen(church: Map<String, dynamic>.from(result)),
+      ));
+    } catch (e) {
+      print('notification nav church error: $e');
+    }
+  }
+}
 
 // ============================================================
 // MAIN.DART
@@ -55,6 +97,17 @@ Firebase.initializeApp(
             .eq('id', userId);
       }
     }
+
+    // Background → foreground: user taps notification while app is running
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+
+    // Cold start: user taps notification to launch app from killed state
+    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      // Wait for splash screen + auth navigation to complete before pushing
+      await Future.delayed(const Duration(seconds: 4));
+      await _handleNotificationTap(initialMessage);
+    }
   } catch (e) {
     print('Firebase background init error: $e');
   }
@@ -85,6 +138,7 @@ class PassageApp extends StatelessWidget {
     return MaterialApp(
       title: 'Passage',
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
       theme: ThemeData.dark().copyWith(
         useMaterial3: true,
         colorScheme: ColorScheme.dark(
