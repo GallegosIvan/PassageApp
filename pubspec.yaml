@@ -16,6 +16,8 @@ dependencies:
   flutter_dotenv: ^5.1.0
 
   http: ^1.2.0
+  
+  flutter_app_badger: ^1.5.0
 
   # Navigation
   go_router: ^13.0.0

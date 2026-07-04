@@ -8,6 +8,7 @@ import 'create_community_screen.dart';
 import 'church_detail_screen.dart';
 import 'create_church_screen.dart';
 import 'qr_scan_screen.dart';
+import 'notifications_screen.dart';
 
 class CommunitiesScreen extends StatefulWidget {
   const CommunitiesScreen({super.key});
@@ -37,6 +38,7 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
   final _communitySearchController = TextEditingController();
   String? _filterBook;
   bool _showFilters = false;
+  int _unreadNotifCount = 0;
 
   final List<String> _books = [
     'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy',
@@ -59,6 +61,7 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadAll();
+    _loadUnreadNotifCount();
     _communitySearchController.addListener(() {
       _loadDiscoverCommunities(query: _communitySearchController.text);
     });
@@ -69,6 +72,21 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     _tabController.dispose();
     _communitySearchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadUnreadNotifCount() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+      final result = await Supabase.instance.client
+          .from('notifications')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('is_read', false);
+      if (mounted) setState(() => _unreadNotifCount = (result as List).length);
+    } catch (e) {
+      print('loadUnreadNotifCount error: \$e');
+    }
   }
 
   Future<void> _loadAll() async {
@@ -186,75 +204,96 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        title: const Text('Communities',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
-            onPressed: () async {
-              final choice = await showModalBottomSheet<String>(
-                context: context,
-                backgroundColor: const Color(0xFF1A1A1A),
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  backgroundColor: Colors.transparent,
+  centerTitle: true,
+  leading: IconButton(
+    icon: const Icon(Icons.add, color: Colors.white),
+    onPressed: () async {
+      final choice = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (_) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(2)),
                 ),
-                builder: (_) => Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40, height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text('What would you like to create?',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 20),
-                      _CreateOption(
-                        icon: Icons.people_outline,
-                        title: 'Study Community',
-                        subtitle: 'A group studying a specific book and chapter',
-                        onTap: () => Navigator.pop(context, 'community'),
-                      ),
-                      const SizedBox(height: 12),
-                      _CreateOption(
-                        icon: Icons.church_outlined,
-                        title: 'Church Profile',
-                        subtitle: 'A church page with multiple communities',
-                        onTap: () => Navigator.pop(context, 'church'),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ),
-                ),
-              );
-
-              if (choice == 'community') {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const CreateCommunityScreen()),
-                );
-                _loadMyCommunities();
-                _loadDiscoverCommunities();
-              } else if (choice == 'church') {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const CreateChurchScreen()),
-                );
-                _loadFollowedChurches();
-              }
-            },
+              ),
+              const SizedBox(height: 16),
+              const Text('What would you like to create?',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              _CreateOption(
+                icon: Icons.people_outline,
+                title: 'Study Community',
+                subtitle: 'A group studying a specific book and chapter',
+                onTap: () => Navigator.pop(context, 'community'),
+              ),
+              const SizedBox(height: 12),
+              _CreateOption(
+                icon: Icons.church_outlined,
+                title: 'Church Profile',
+                subtitle: 'A church page with multiple communities',
+                onTap: () => Navigator.pop(context, 'church'),
+              ),
+              const SizedBox(height: 8),
+            ],
           ),
-        ],
-        bottom: PreferredSize(
+        ),
+      );
+
+      if (choice == 'community') {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const CreateCommunityScreen()),
+        );
+        _loadMyCommunities();
+        _loadDiscoverCommunities();
+      } else if (choice == 'church') {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const CreateChurchScreen()),
+        );
+        _loadFollowedChurches();
+      }
+    },
+  ),
+  title: const Text('Communities',
+      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+  actions: [
+    Stack(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+          onPressed: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            );
+            _loadUnreadNotifCount();
+          },
+        ),
+        if (_unreadNotifCount > 0)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Text(
+                _unreadNotifCount > 99 ? '99+' : '$_unreadNotifCount',
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    ),
+  ],
+  bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Theme(
             data: Theme.of(context).copyWith(
