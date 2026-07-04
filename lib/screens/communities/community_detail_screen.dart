@@ -762,6 +762,10 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                 Text('Announcements', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
               ]),
               const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: SingleChildScrollView(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               ..._announcements.map((a) {
                 final user = a['users'];
                 final name = user?['display_name'] ?? user?['username'] ?? 'Admin';
@@ -812,6 +816,9 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                   ]),
                 );
               }),
+                  ]),
+                ),
+              ),
               const SizedBox(height: 4),
               const Divider(color: Color(0xFF2A2A2A)),
             ]),

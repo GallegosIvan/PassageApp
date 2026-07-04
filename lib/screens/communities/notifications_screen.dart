@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+const _badgeChannel = MethodChannel('badge_channel');
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -37,6 +40,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           .update({'is_read': true})
           .eq('user_id', _client.auth.currentUser!.id)
           .eq('is_read', false);
+      await _badgeChannel.invokeMethod('clearBadge');
     } catch (e) {
       print('loadNotifications error: $e');
       if (mounted) setState(() => _isLoading = false);
@@ -49,6 +53,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           .from('notifications')
           .delete()
           .eq('user_id', _client.auth.currentUser!.id);
+      await _badgeChannel.invokeMethod('clearBadge');
       if (mounted) setState(() => _notifications = []);
     } catch (e) {
       print('clearNotifications error: $e');
