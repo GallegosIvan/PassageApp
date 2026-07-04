@@ -10,6 +10,7 @@ import 'services/subscription_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/communities/community_detail_screen.dart';
 import 'screens/communities/church_detail_screen.dart';
+import 'screens/communities/church_chat_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -18,6 +19,7 @@ Future<void> _handleNotificationTap(RemoteMessage message) async {
   final type = data['type'] as String?;
   final communityId = data['community_id'] as String?;
   final churchId = data['church_id'] as String?;
+  final postId = data['post_id'] as String?;
 
   final nav = navigatorKey.currentState;
   if (nav == null) return;
@@ -30,12 +32,29 @@ Future<void> _handleNotificationTap(RemoteMessage message) async {
           .eq('id', communityId)
           .single();
       nav.push(MaterialPageRoute(
-        builder: (_) => CommunityDetailScreen(community: Map<String, dynamic>.from(result)),
+        builder: (_) => CommunityDetailScreen(
+          community: Map<String, dynamic>.from(result),
+          initialPostId: type == 'reply' ? postId : null,
+        ),
       ));
     } catch (e) {
       print('notification nav community error: $e');
     }
+  } else if (type == 'church_message' && communityId != null) {
+    try {
+      final result = await Supabase.instance.client
+          .from('communities')
+          .select()
+          .eq('id', communityId)
+          .single();
+      nav.push(MaterialPageRoute(
+        builder: (_) => ChurchChatScreen(community: Map<String, dynamic>.from(result)),
+      ));
+    } catch (e) {
+      print('notification nav church chat error: $e');
+    }
   } else if (type == 'church_message' && churchId != null) {
+    // fallback if community_id not in payload — open church detail
     try {
       final result = await Supabase.instance.client
           .from('churches')

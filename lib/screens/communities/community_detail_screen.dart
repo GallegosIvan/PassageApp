@@ -8,8 +8,9 @@ import 'community_settings_screen.dart';
 
 class CommunityDetailScreen extends StatefulWidget {
   final Map<String, dynamic> community;
+  final String? initialPostId;
 
-  const CommunityDetailScreen({super.key, required this.community});
+  const CommunityDetailScreen({super.key, required this.community, this.initialPostId});
 
   @override
   State<CommunityDetailScreen> createState() => _CommunityDetailScreenState();
@@ -222,6 +223,27 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
     );
   }
 
+  void _maybeOpenInitialPost() {
+    final postId = widget.initialPostId;
+    if (postId == null) return;
+    final post = _posts.cast<Map<String, dynamic>?>().firstWhere(
+      (p) => p?['id'] == postId,
+      orElse: () => null,
+    );
+    if (post == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => _ReplyScreen(
+            post: post,
+            communityId: widget.community['id'],
+            blockedUserIds: _blockedUserIds,
+          ),
+        ));
+      }
+    });
+  }
+
   Future<void> _loadPosts() async {
     setState(() => _isLoading = true);
     try {
@@ -240,6 +262,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
           _filteredPosts = _posts;
           _isLoading = false;
         });
+        _maybeOpenInitialPost();
       }
     } catch (e) {
       print('loadPosts error: $e');
