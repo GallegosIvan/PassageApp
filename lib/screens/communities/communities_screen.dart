@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../services/community_service.dart';
 import '../../services/church_service.dart';
 import '../../services/app_cache.dart';
@@ -18,7 +20,7 @@ class CommunitiesScreen extends StatefulWidget {
 }
 
 class _CommunitiesScreenState extends State<CommunitiesScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final _communityService = CommunityService();
   final _churchService = ChurchService();
   late TabController _tabController;
@@ -57,9 +59,13 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
     'Revelation',
   ];
 
+  StreamSubscription? _fcmSubscription;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _fcmSubscription = FirebaseMessaging.onMessage.listen((_) => _loadUnreadNotifCount());
     _tabController = TabController(length: 3, vsync: this);
     _loadAll();
     _loadUnreadNotifCount();
@@ -71,12 +77,21 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _fcmSubscription?.cancel();
     if (_notifChannel != null) {
       Supabase.instance.client.removeChannel(_notifChannel!);
     }
     _tabController.dispose();
     _communitySearchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadUnreadNotifCount();
+    }
   }
 
   void _subscribeToNotifications() {

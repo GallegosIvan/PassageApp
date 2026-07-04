@@ -113,6 +113,24 @@ Future<void> main() async {
     anonKey: dotenv.get('SUPABASE_ANON_KEY'),
   );
 
+  // Listen for auth state changes before Firebase init so we never miss
+  // the session-restore event that fires during splash screen navigation
+  Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+    if (data.event == AuthChangeEvent.signedIn ||
+        data.event == AuthChangeEvent.tokenRefreshed) {
+      try {
+        final token = await FirebaseMessaging.instance.getToken();
+        final uid = data.session?.user.id;
+        if (token != null && uid != null) {
+          await Supabase.instance.client
+              .from('users')
+              .update({'fcm_token': token})
+              .eq('id', uid);
+        }
+      } catch (_) {} // Firebase may not be ready yet on very first launch
+    }
+  });
+
   // Don't await — run in background so app launches immediately
 Firebase.initializeApp(
   options: DefaultFirebaseOptions.currentPlatform,
@@ -139,22 +157,6 @@ Firebase.initializeApp(
             .from('users')
             .update({'fcm_token': newToken})
             .eq('id', userId);
-      }
-    });
-
-    // Save token on session restore — covers the async gap where currentUser
-    // is null when Firebase first initializes
-    Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
-      if (data.event == AuthChangeEvent.signedIn ||
-          data.event == AuthChangeEvent.tokenRefreshed) {
-        final token = await FirebaseMessaging.instance.getToken();
-        final uid = data.session?.user.id;
-        if (token != null && uid != null) {
-          await Supabase.instance.client
-              .from('users')
-              .update({'fcm_token': token})
-              .eq('id', uid);
-        }
       }
     });
 
