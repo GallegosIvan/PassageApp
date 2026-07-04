@@ -34,17 +34,8 @@ class _BibleChaptersScreenState extends State<BibleChaptersScreen> {
 
   Future<void> _loadData() async {
     final bookmarks = await _interactionService.getBookmarks();
-    Set<int> readChapters;
     final bookId = widget.book['id'] as String;
-    if (AppCache.instance.readChapters != null) {
-      readChapters = AppCache.instance.readChapters!
-          .where((k) => k.startsWith('${bookId}_'))
-          .map((k) => int.tryParse(k.split('_').last) ?? 0)
-          .where((c) => c > 0)
-          .toSet();
-    } else {
-      readChapters = await _loadReadChapters();
-    }
+    final readChapters = await _loadReadChapters();
     if (mounted) {
       setState(() {
         _bookmarks = bookmarks;

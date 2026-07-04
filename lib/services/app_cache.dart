@@ -57,8 +57,10 @@ class AppCache {
   Set<String>? get readChapters => _readChapters;
   void setReadChapters(Set<String> chapters) => _readChapters = chapters;
   void markChapterRead(String bookId, int chapter) {
-    _readChapters ??= {};
-    _readChapters!.add('${bookId}_$chapter');
+    _readChapters?.add('${bookId}_$chapter');
+  }
+  void removeChapterRead(String bookId, int chapter) {
+    _readChapters?.remove('${bookId}_$chapter');
   }
   void invalidateReadHistory() => _readChapters = null;
 

@@ -49,7 +49,26 @@ class _BibleBooksScreenState extends State<BibleBooksScreen> {
     if (!_initialLoadDone) {
       _initialLoadDone = true;
       _loadData();
+    } else {
+      _refreshReadCounts();
     }
+  }
+
+  Future<void> _refreshReadCounts() async {
+    if (!mounted) return;
+    Map<String, int> readCounts;
+    if (AppCache.instance.readChapters != null) {
+      readCounts = {};
+      for (final key in AppCache.instance.readChapters!) {
+        final parts = key.split('_');
+        if (parts.length == 2) {
+          readCounts[parts[0]] = (readCounts[parts[0]] ?? 0) + 1;
+        }
+      }
+    } else {
+      readCounts = await _loadReadChapterCounts();
+    }
+    if (mounted) setState(() => _readChapterCounts = readCounts);
   }
 
   @override

@@ -50,6 +50,10 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
   bool _isRead = false;
   Timer? _readTimer;
 
+  int? _currentChapterOverride;
+  int get _currentChapter => _currentChapterOverride ?? widget.chapterNumber;
+  bool _slideFromRight = true;
+
   @override
   void initState() {
     super.initState();
@@ -79,15 +83,15 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
         'user_id': userId,
         'book_id': widget.bookId,
         'book_name': widget.bookName,
-        'chapter': widget.chapterNumber,
+        'chapter': _currentChapter,
         'read_at': DateTime.now().toIso8601String(),
       }, onConflict: 'user_id,book_id,chapter');
-      AppCache.instance.markChapterRead(widget.bookId, widget.chapterNumber);
+      AppCache.instance.markChapterRead(widget.bookId, _currentChapter);
       if (mounted) {
         setState(() => _isRead = true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${widget.bookName} ${widget.chapterNumber} marked as read'),
+            content: Text('${widget.bookName} ${_currentChapter} marked as read'),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),
@@ -108,7 +112,8 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
             .delete()
             .eq('user_id', userId)
             .eq('book_id', widget.bookId)
-            .eq('chapter', widget.chapterNumber);
+            .eq('chapter', _currentChapter);
+        AppCache.instance.invalidateReadHistory();
         if (mounted) setState(() => _isRead = false);
       } catch (e) {
         print('unmarkAsRead error: $e');
@@ -120,7 +125,7 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
   }
 
   Future<void> _checkIfRead() async {
-    final cacheKey = '\${widget.bookId}_\${widget.chapterNumber}';
+    final cacheKey = '\${widget.bookId}_\${_currentChapter}';
     if (AppCache.instance.readChapters != null) {
       if (mounted) setState(() => _isRead = AppCache.instance.readChapters!.contains(cacheKey));
       return;
@@ -128,14 +133,14 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
     try {
-      final result = await _client
+      final results = await _client
           .from('reading_history')
           .select('id')
           .eq('user_id', userId)
           .eq('book_id', widget.bookId)
-          .eq('chapter', widget.chapterNumber)
-          .maybeSingle();
-      if (mounted) setState(() => _isRead = result != null);
+          .eq('chapter', _currentChapter)
+          .limit(1);
+      if (mounted) setState(() => _isRead = (results as List).isNotEmpty);
     } catch (e) {
       print('checkIfRead error: \$e');
     }
@@ -150,17 +155,17 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
       final chapterData = await _bibleService.getChapter(
         widget.translationId,
         widget.bookId,
-        widget.chapterNumber,
+        _currentChapter,
       );
       final content = chapterData['chapter']['content'] as List<dynamic>;
       final verses = _bibleService.parseVerses(content);
       final annotations = await _bibleService.getAnnotationsForChapter(
         book: widget.bookName,
-        chapter: widget.chapterNumber,
+        chapter: _currentChapter,
       );
       final highlights = await _interactionService.getHighlightsForChapter(
         bookId: widget.bookId,
-        chapter: widget.chapterNumber,
+        chapter: _currentChapter,
       );
       final bookmarks = await _interactionService.getBookmarks();
       final isPaid = await _interactionService.isPaidUser();
@@ -185,11 +190,11 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
   Future<void> _refreshData() async {
     final annotations = await _bibleService.getAnnotationsForChapter(
       book: widget.bookName,
-      chapter: widget.chapterNumber,
+      chapter: _currentChapter,
     );
     final highlights = await _interactionService.getHighlightsForChapter(
       bookId: widget.bookId,
-      chapter: widget.chapterNumber,
+      chapter: _currentChapter,
     );
     if (mounted) {
       setState(() {
@@ -241,10 +246,10 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
       isScrollControlled: true,
       builder: (_) => _VerseActionsSheet(
         verse: verse,
-        verseRef: '${widget.bookName} ${widget.chapterNumber}:$verseNumber',
+        verseRef: '${widget.bookName} ${_currentChapter}:$verseNumber',
         bookId: widget.bookId,
         bookName: widget.bookName,
-        chapter: widget.chapterNumber,
+        chapter: _currentChapter,
         verseNumber: verseNumber,
         existingAnnotation: existing,
         existingHighlight: highlight,
@@ -258,17 +263,18 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
 
   void _navigateToChapter(int chapterNumber) {
     _readTimer?.cancel();
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => BibleReaderScreen(
-          translationId: widget.translationId,
-          bookId: widget.bookId,
-          bookName: widget.bookName,
-          chapterNumber: chapterNumber,
-          totalChapters: widget.totalChapters,
-        ),
-      ),
-    );
+    setState(() {
+      _slideFromRight = chapterNumber > _currentChapter;
+      _currentChapterOverride = chapterNumber;
+      _isRead = false;
+      _verses = [];
+      _annotations = [];
+      _highlights = [];
+      _isLoading = true;
+      _error = null;
+    });
+    _loadChapter();
+    _startReadTimer();
   }
 
   void _showBookmarkSheet() {
@@ -295,7 +301,7 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
             const SizedBox(height: 20),
             ...colors.map((color) {
               final existing = _bookmarks.firstWhere((b) => b['color'] == color, orElse: () => {});
-              final isThisChapter = existing.isNotEmpty && existing['book_id'] == widget.bookId && existing['chapter'] == widget.chapterNumber;
+              final isThisChapter = existing.isNotEmpty && existing['book_id'] == widget.bookId && existing['chapter'] == _currentChapter;
               final isOtherChapter = existing.isNotEmpty && !isThisChapter;
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
@@ -305,7 +311,7 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
                   leading: Icon(existing.isNotEmpty ? Icons.bookmark : Icons.bookmark_border, color: colorValues[color]),
                   title: Text(colorLabels[color]!, style: const TextStyle(color: Colors.white)),
                   subtitle: Text(
-                    isThisChapter ? '${widget.bookName} ${widget.chapterNumber} — tap to remove'
+                    isThisChapter ? '${widget.bookName} ${_currentChapter} — tap to remove'
                         : isOtherChapter ? '${existing['book_name']} ${existing['chapter']} — tap to replace'
                         : 'Empty slot',
                     style: const TextStyle(color: Colors.white, fontSize: 12),
@@ -315,13 +321,13 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
                     if (isThisChapter) {
                       await _interactionService.removeBookmark(color);
                     } else {
-                      await _interactionService.saveBookmark(bookId: widget.bookId, bookName: widget.bookName, chapter: widget.chapterNumber, color: color);
+                      await _interactionService.saveBookmark(bookId: widget.bookId, bookName: widget.bookName, chapter: _currentChapter, color: color);
                     }
                     final bookmarks = await _interactionService.getBookmarks();
                     if (mounted) setState(() => _bookmarks = bookmarks);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(isThisChapter ? 'Bookmark removed' : '${widget.bookName} ${widget.chapterNumber} bookmarked'),
+                        content: Text(isThisChapter ? 'Bookmark removed' : '${widget.bookName} ${_currentChapter} bookmarked'),
                         backgroundColor: isThisChapter ? Colors.grey[700] : colorValues[color],
                         behavior: SnackBarBehavior.floating,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -347,7 +353,7 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
       ),
       builder: (_) => _QuizSheet(
         bookName: widget.bookName,
-        chapterNumber: widget.chapterNumber,
+        chapterNumber: _currentChapter,
         translationId: widget.translationId,
         verseCount: _verses.length,
         isPaidUser: _isPaidUser,
@@ -361,7 +367,7 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: Text('${widget.bookName} ${widget.chapterNumber}',
+        title: Text('${widget.bookName} ${_currentChapter}',
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
@@ -371,15 +377,31 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : _error != null
-              ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text(_error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
-                  const SizedBox(height: 16),
-                  ElevatedButton(onPressed: _loadChapter, child: const Text('Retry')),
-                ]))
-              : Column(children: [
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        transitionBuilder: (child, animation) {
+          final incoming = animation.status == AnimationStatus.dismissed ||
+              animation.status == AnimationStatus.forward;
+          final beginOffset = _slideFromRight
+              ? (incoming ? const Offset(1.0, 0.0) : const Offset(-1.0, 0.0))
+              : (incoming ? const Offset(-1.0, 0.0) : const Offset(1.0, 0.0));
+          return SlideTransition(
+            position: Tween<Offset>(begin: beginOffset, end: Offset.zero)
+                .animate(animation),
+            child: child,
+          );
+        },
+        child: KeyedSubtree(
+          key: ValueKey(_currentChapter),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator(color: Colors.white))
+              : _error != null
+                  ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Text(_error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      ElevatedButton(onPressed: _loadChapter, child: const Text('Retry')),
+                    ]))
+                  : Column(children: [
                   Expanded(
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
@@ -425,9 +447,9 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
                     decoration: const BoxDecoration(color: Colors.black, border: Border(top: BorderSide(color: Colors.white10))),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      if (widget.chapterNumber > 1)
+                      if (_currentChapter > 1)
                        TextButton.icon(
-                        onPressed: () => _navigateToChapter(widget.chapterNumber - 1),
+                        onPressed: () => _navigateToChapter(_currentChapter - 1),
                         icon: const Icon(Icons.chevron_left, color: Colors.white, size: 24),
                         label: const Text('Prev', style: TextStyle(color: Colors.white, fontSize: 12)),
                        )
@@ -435,7 +457,7 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
                        const SizedBox(width: 72),
                       IconButton(onPressed: _showQuizSheet, tooltip: 'Quiz me', icon: const Icon(Icons.quiz_outlined, color: Colors.white, size: 22)),
                       Flexible(
-                       child: Text('Ch ${widget.chapterNumber}/${widget.totalChapters}', 
+                       child: Text('Ch ${_currentChapter}/${widget.totalChapters}', 
                         style: const TextStyle(color: Colors.white, fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
@@ -449,13 +471,13 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
                       IconButton(
                         onPressed: _showBookmarkSheet,
                         icon: Icon(
-                          _bookmarks.any((b) => b['book_id'] == widget.bookId && b['chapter'] == widget.chapterNumber) ? Icons.bookmark : Icons.bookmark_border,
+                          _bookmarks.any((b) => b['book_id'] == widget.bookId && b['chapter'] == _currentChapter) ? Icons.bookmark : Icons.bookmark_border,
                           color: Colors.white, size: 22,
                         ),
                       ),
-                      if (widget.chapterNumber < widget.totalChapters)
+                      if (_currentChapter < widget.totalChapters)
                        TextButton.icon(
-                        onPressed: () => _navigateToChapter(widget.chapterNumber + 1),
+                        onPressed: () => _navigateToChapter(_currentChapter + 1),
                         icon: const Text('Next', style: TextStyle(color: Colors.white, fontSize: 12)),
                         label: const Icon(Icons.chevron_right, color: Colors.white, size: 24),
                        )
@@ -464,6 +486,8 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
                     ]),
                   ),
                 ]),
+        ),
+      ),
     );
   }
 }
