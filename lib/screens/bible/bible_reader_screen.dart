@@ -1602,6 +1602,8 @@ class _ShareToCommunitySheetState extends State<_ShareToCommunitySheet> {
       const SizedBox(height: 12),
       TextField(
         controller: _commentController, maxLines: 3, style: const TextStyle(color: Colors.white),
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => FocusScope.of(context).unfocus(),
         decoration: InputDecoration(
           hintText: 'Add a comment (optional)', hintStyle: const TextStyle(color: Color(0xFF9090A0)),
           filled: true, fillColor: const Color(0xFF0F0F1A),
