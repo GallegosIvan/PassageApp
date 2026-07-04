@@ -411,6 +411,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
   String _timeAgo(String dateStr) {
     final date = DateTime.parse(dateStr);
     final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
@@ -1111,6 +1112,7 @@ class _ReplyScreenState extends State<_ReplyScreen> {
   String _timeAgo(String dateStr) {
     final date = DateTime.parse(dateStr);
     final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';

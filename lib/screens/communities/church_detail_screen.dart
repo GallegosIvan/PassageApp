@@ -493,6 +493,7 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
   String _timeAgo(String dateStr) {
     final date = DateTime.parse(dateStr);
     final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
@@ -718,7 +719,8 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
 
                   const Divider(color: Color(0xFF2A2A2A)),
 
-                  Padding(
+                  Container(
+                    color: const Color(0xFF1A1A1A),
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -751,6 +753,12 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
                             ),
                           )
                         else
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 220),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
                           ..._announcements.map((a) {
                             final user = a['users'];
                             final name = user?['display_name'] ??
@@ -761,10 +769,11 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
                             return Container(
                               margin:
                                   const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.all(14),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1A1A1A),
+                                color: Colors.black,
                                 borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.white.withOpacity(0.08)),
                               ),
                               child: Column(
                                 crossAxisAlignment:
@@ -772,6 +781,8 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
                                 children: [
                                   Row(
                                     children: [
+                                      const Icon(Icons.campaign_outlined, color: Colors.white, size: 14),
+                                      const SizedBox(width: 6),
                                       Text(
                                         name,
                                         style: const TextStyle(
@@ -870,6 +881,10 @@ class _ChurchDetailScreenState extends State<ChurchDetailScreen> with SingleTick
                               ),
                             );
                           }),
+                                ],
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),

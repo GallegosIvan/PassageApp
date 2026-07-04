@@ -3,18 +3,21 @@ import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private var badgeChannel: FlutterMethodChannel?
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
 
-    if let controller = window?.rootViewController as? FlutterViewController {
-      let badgeChannel = FlutterMethodChannel(
-        name: "badge_channel",
-        binaryMessenger: controller.binaryMessenger
-      )
-      badgeChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    if let engine = engineBridge.pluginRegistry as? FlutterEngine {
+      badgeChannel = FlutterMethodChannel(name: "badge_channel", binaryMessenger: engine.binaryMessenger)
+      badgeChannel?.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
         if call.method == "clearBadge" {
           UIApplication.shared.applicationIconBadgeNumber = 0
           result(nil)
@@ -23,11 +26,5 @@ import UIKit
         }
       }
     }
-
-    return result
-  }
-
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
 }

@@ -40,7 +40,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           .update({'is_read': true})
           .eq('user_id', _client.auth.currentUser!.id)
           .eq('is_read', false);
-      await _badgeChannel.invokeMethod('clearBadge');
+      try { await _badgeChannel.invokeMethod('clearBadge'); } catch (_) {}
     } catch (e) {
       print('loadNotifications error: $e');
       if (mounted) setState(() => _isLoading = false);
@@ -48,13 +48,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _clearAll() async {
+    if (mounted) setState(() => _notifications = []);
+    try { await _badgeChannel.invokeMethod('clearBadge'); } catch (_) {}
     try {
       await _client
           .from('notifications')
           .delete()
           .eq('user_id', _client.auth.currentUser!.id);
-      await _badgeChannel.invokeMethod('clearBadge');
-      if (mounted) setState(() => _notifications = []);
     } catch (e) {
       print('clearNotifications error: $e');
     }
@@ -73,6 +73,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String _timeAgo(String createdAt) {
     final date = DateTime.parse(createdAt).toLocal();
     final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
