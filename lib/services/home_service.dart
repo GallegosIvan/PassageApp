@@ -31,20 +31,47 @@ class HomeService {
     }
   }
 
-  // ── GET OR CREATE STREAK ──────────────────────────────────
-  // API CALL: Supabase DB — fetches user's reading streak
-  // Streak is tracked via a simple table we'll add
+  // ── GET STREAK ────────────────────────────────────────────
+  // Calculates the streak directly from reading_days so it
+  // always matches the highlighted days in the weekly tracker.
   Future<int> getStreak() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return 0;
 
     try {
       final response = await _client
-          .from('reading_streaks')
-          .select('streak_count')
+          .from('reading_days')
+          .select('read_date')
           .eq('user_id', userId)
-          .maybeSingle();
-      return response?['streak_count'] ?? 0;
+          .order('read_date', ascending: false)
+          .limit(400);
+
+      final dates = (response as List)
+          .map((r) => DateTime.parse(r['read_date'] as String))
+          .toList();
+
+      if (dates.isEmpty) return 0;
+
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+      final mostRecentDate = DateTime(dates.first.year, dates.first.month, dates.first.day);
+      final daysSinceLast = todayDate.difference(mostRecentDate).inDays;
+
+      // Streak is broken if most recent reading was more than 1 day ago
+      if (daysSinceLast > 1) return 0;
+
+      int streak = 0;
+      DateTime expected = mostRecentDate;
+      for (final d in dates) {
+        final date = DateTime(d.year, d.month, d.day);
+        if (date == expected) {
+          streak++;
+          expected = expected.subtract(const Duration(days: 1));
+        } else if (date.isBefore(expected)) {
+          break;
+        }
+      }
+      return streak;
     } catch (e) {
       print('getStreak error: $e');
       return 0;
