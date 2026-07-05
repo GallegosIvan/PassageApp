@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/app_cache.dart';
+import '../../services/home_service.dart';
 import '../auth/landing_screen.dart';
 import 'settings_screen.dart';
 import '../../widgets/upgrade_sheet.dart';
@@ -71,7 +72,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) setState(() {
         _profile = cached['profile'] as Map<String, dynamic>;
         _subscription = cached['subscription'] as Map<String, dynamic>?;
-        _streak = cached['streak'] as int? ?? 0;
+        // Use the shared streak cache (set by home screen) so the value
+        // is always the correctly-calculated one from the start.
+        _streak = AppCache.instance.streakCount ?? cached['streak'] as int? ?? 0;
         _displayNameController.text =
             (_profile?['display_name'] ?? _profile?['username'] ?? '').toString();
         _isLoading = false;
@@ -86,7 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _fetchProfile(String userId, {required bool showLoading}) async {
     try {
-      final results = await Future.wait([
+      final results = await Future.wait<dynamic>([
         _client
             .from('users')
             .select('username, display_name, email, avatar_url, denomination, created_at')
@@ -97,18 +100,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .select('plan, status')
             .eq('user_id', userId)
             .maybeSingle(),
-        _client
-            .from('reading_streaks')
-            .select('streak_count')
-            .eq('user_id', userId)
-            .maybeSingle(),
+        HomeService().getStreak(),
       ]);
 
       final profile = results[0] as Map<String, dynamic>;
       final subscription = results[1] as Map<String, dynamic>?;
-      final streakData = results[2] as Map<String, dynamic>?;
-      final streak = streakData?['streak_count'] as int? ?? 0;
+      final streak = results[2] as int;
 
+      AppCache.instance.setStreakCount(streak);
       AppCache.instance.setProfileData({
         'profile': profile,
         'subscription': subscription,
