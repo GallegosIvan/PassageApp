@@ -39,10 +39,16 @@ class HomeService {
     if (userId == null) return 0;
 
     try {
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+      final todayStr =
+          '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
       final response = await _client
           .from('reading_days')
           .select('read_date')
           .eq('user_id', userId)
+          .lte('read_date', todayStr)
           .order('read_date', ascending: false)
           .limit(400);
 
@@ -52,8 +58,6 @@ class HomeService {
 
       if (dates.isEmpty) return 0;
 
-      final today = DateTime.now();
-      final todayDate = DateTime(today.year, today.month, today.day);
       final mostRecentDate = DateTime(dates.first.year, dates.first.month, dates.first.day);
       final daysSinceLast = todayDate.difference(mostRecentDate).inDays;
 
@@ -79,11 +83,14 @@ class HomeService {
   }
 
   // ── UPDATE STREAK ─────────────────────────────────────────
-  // API CALL: Supabase DB — called when user opens Bible reader
+  // Passes the device's local date so the RPC writes the correct
+  // calendar date instead of the server's UTC date.
   Future<void> updateStreak() async {
     try {
-      // API CALL: Supabase DB function — runs server-side via RPC
-      await _client.rpc('update_user_streak');
+      final today = DateTime.now();
+      final localDate =
+          '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+      await _client.rpc('update_user_streak', params: {'p_today': localDate});
     } catch (e) {
       print('updateStreak error: $e');
     }
@@ -101,11 +108,16 @@ class HomeService {
       final weekStart =
           '${startDay.year.toString().padLeft(4, '0')}-${startDay.month.toString().padLeft(2, '0')}-${startDay.day.toString().padLeft(2, '0')}';
 
+      final now2 = DateTime.now();
+      final todayStr =
+          '${now2.year.toString().padLeft(4, '0')}-${now2.month.toString().padLeft(2, '0')}-${now2.day.toString().padLeft(2, '0')}';
+
       final response = await _client
           .from('reading_days')
           .select('read_date')
           .eq('user_id', userId)
-          .gte('read_date', weekStart);
+          .gte('read_date', weekStart)
+          .lte('read_date', todayStr);
 
       return List<String>.from(
           (response as List).map((r) => r['read_date'] as String));

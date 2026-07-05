@@ -78,9 +78,12 @@ class _ReadingHistoryScreenState extends State<ReadingHistoryScreen> {
 
   int _countReadDaysInMonth() {
     final daysInMonth = DateTime(_visibleMonth.year, _visibleMonth.month + 1, 0).day;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     int count = 0;
     for (int day = 1; day <= daysInMonth; day++) {
-      if (_wasReadOn(DateTime(_visibleMonth.year, _visibleMonth.month, day))) count++;
+      final date = DateTime(_visibleMonth.year, _visibleMonth.month, day);
+      if (!date.isAfter(today) && _wasReadOn(date)) count++;
     }
     return count;
   }
