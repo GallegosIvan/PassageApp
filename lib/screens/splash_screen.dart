@@ -7,7 +7,8 @@ import 'auth/landing_screen.dart';
 import 'onboarding_flow.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final bool showNoInternet;
+  const SplashScreen({super.key, this.showNoInternet = false});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -20,7 +21,11 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _checkAndNavigate();
+    if (widget.showNoInternet) {
+      setState(() => _noInternet = true);
+    } else {
+      _checkAndNavigate();
+    }
   }
 
   Future<bool> _hasInternet() async {

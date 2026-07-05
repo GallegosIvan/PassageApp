@@ -276,8 +276,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   bool _wasReadOn(DateTime date) {
-    final dateStr = date.toUtc().toIso8601String().substring(0, 10);
-    return _daysRead.contains(dateStr);
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return _daysRead.contains('$y-$m-$d');
   }
 
   @override

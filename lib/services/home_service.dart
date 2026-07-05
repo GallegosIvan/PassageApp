@@ -69,9 +69,10 @@ class HomeService {
     if (userId == null) return [];
 
     try {
-      final now = DateTime.now().toUtc();
+      final now = DateTime.now();
+      final startDay = now.subtract(Duration(days: now.weekday % 7));
       final weekStart =
-          now.subtract(Duration(days: now.weekday % 7)).toIso8601String().substring(0, 10);
+          '${startDay.year.toString().padLeft(4, '0')}-${startDay.month.toString().padLeft(2, '0')}-${startDay.day.toString().padLeft(2, '0')}';
 
       final response = await _client
           .from('reading_days')
