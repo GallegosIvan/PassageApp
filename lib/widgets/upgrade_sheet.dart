@@ -335,7 +335,7 @@ class _UpgradeSheetState extends State<UpgradeSheet> {
                 const Text('·', style: TextStyle(color: Colors.white24)),
                 TextButton(
                   onPressed: () => launchUrl(
-                    Uri.parse('https://app.termly.io/policy-viewer/policy.html?policyUUID=ee043960-b26b-47a2-9e42-d5be53fdf766'),
+                    Uri.parse('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'),
                     mode: LaunchMode.externalApplication,
                   ),
                   child: const Text(
