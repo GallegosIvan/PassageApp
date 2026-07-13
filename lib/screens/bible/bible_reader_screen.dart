@@ -359,6 +359,10 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
   }
 
   Future<void> _showQuizSheet() async {
+    if (GuestSession.isGuest) {
+      GuestSignUpSheet.show(context);
+      return;
+    }
     final allowed = await AiConsentDialog.requestConsent(context);
     if (!allowed || !mounted) return;
     showModalBottomSheet(
