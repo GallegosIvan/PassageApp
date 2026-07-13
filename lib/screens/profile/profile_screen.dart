@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/app_cache.dart';
 import '../../services/home_service.dart';
+import '../../services/guest_session.dart';
+import '../../widgets/guest_signup_sheet.dart';
 import '../auth/landing_screen.dart';
 import 'settings_screen.dart';
 import '../../widgets/upgrade_sheet.dart';
@@ -228,6 +230,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (GuestSession.isGuest) return _GuestProfileScreen();
+
     final displayName =
         _profile?['display_name'] ?? _profile?['username'] ?? 'User';
     final username = _profile?['username'] ?? '';
@@ -775,6 +779,121 @@ class _StatCard extends StatelessWidget {
                   color: valueColor,
                   fontSize: 18,
                   fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+}
+
+class _GuestProfileScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        title: const Text('Profile',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const SizedBox(height: 24),
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.white12,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: const Icon(Icons.person_outline, color: Colors.white38, size: 40),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Guest',
+              style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Browsing without an account',
+              style: TextStyle(color: Colors.white38, fontSize: 13),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Create an account to:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
+                  const SizedBox(height: 12),
+                  _GuestFeatureRow(icon: Icons.local_fire_department_outlined, label: 'Track your reading streak'),
+                  _GuestFeatureRow(icon: Icons.bookmark_outline, label: 'Save highlights and bookmarks'),
+                  _GuestFeatureRow(icon: Icons.edit_note, label: 'Add personal notes to verses'),
+                  _GuestFeatureRow(icon: Icons.people_outline, label: 'Join and create communities'),
+                  _GuestFeatureRow(icon: Icons.church_outlined, label: 'Connect with your church'),
+                  _GuestFeatureRow(icon: Icons.auto_awesome, label: 'Use the AI Bible assistant'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: () => GuestSignUpSheet.show(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Create a free account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: TextButton(
+                onPressed: () async {
+                  await GuestSession.end();
+                  if (context.mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LandingScreen()),
+                      (_) => false,
+                    );
+                  }
+                },
+                child: const Text('Log in', style: TextStyle(color: Colors.white54, fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GuestFeatureRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _GuestFeatureRow({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white54, size: 18),
+          const SizedBox(width: 10),
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
         ],
       ),
     );

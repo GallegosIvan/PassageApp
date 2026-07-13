@@ -12,6 +12,8 @@ import '../../widgets/upgrade_sheet.dart';
 import '../../widgets/restricted_dialog.dart';
 import '../../widgets/rate_us_dialog.dart';
 import '../../widgets/ai_consent_dialog.dart';
+import '../../widgets/guest_signup_sheet.dart';
+import '../../services/guest_session.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class BibleReaderScreen extends StatefulWidget {
@@ -104,6 +106,10 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
   }
 
   Future<void> _toggleRead() async {
+    if (GuestSession.isGuest) {
+      GuestSignUpSheet.show(context);
+      return;
+    }
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
     if (_isRead) {
@@ -235,6 +241,10 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
   }
 
   void _onVerseTap(Map<String, dynamic> verse) {
+    if (GuestSession.isGuest) {
+      GuestSignUpSheet.show(context);
+      return;
+    }
     final verseNumber = verse['number'] as int;
     final existing = _getAnnotation(verseNumber);
     final highlight = _getHighlight(verseNumber);
@@ -279,6 +289,10 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
   }
 
   void _showBookmarkSheet() {
+    if (GuestSession.isGuest) {
+      GuestSignUpSheet.show(context);
+      return;
+    }
     final colors = ['purple', 'blue', 'green'];
     final colorValues = {'purple': Colors.white, 'blue': Colors.blue, 'green': Colors.green};
     final colorLabels = {'purple': 'Bookmark 1', 'blue': 'Bookmark 2', 'green': 'Bookmark 3'};

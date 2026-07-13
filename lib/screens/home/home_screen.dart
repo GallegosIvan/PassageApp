@@ -9,6 +9,8 @@ import '../../services/bible_service.dart';
 import '../auth/signup_screen.dart';
 import '../ai/ai_chat_screen.dart';
 import '../../widgets/ai_consent_dialog.dart';
+import '../../widgets/guest_signup_sheet.dart';
+import '../../services/guest_session.dart';
 import '../../widgets/rate_us_dialog.dart';
 import '../../widgets/strike_warning_dialog.dart';
 import '../profile/appeal_screen.dart';
@@ -301,6 +303,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           IconButton(
             icon: const Icon(Icons.try_sms_star, color: Colors.white),
             onPressed: () async {
+              if (GuestSession.isGuest) {
+                GuestSignUpSheet.show(context);
+                return;
+              }
               final allowed = await AiConsentDialog.requestConsent(context);
               if (allowed && context.mounted) {
                 Navigator.of(context).push(

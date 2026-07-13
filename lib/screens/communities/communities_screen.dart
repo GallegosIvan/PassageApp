@@ -5,6 +5,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../services/community_service.dart';
 import '../../services/church_service.dart';
 import '../../services/app_cache.dart';
+import '../../services/guest_session.dart';
+import '../../widgets/guest_signup_sheet.dart';
 import 'community_detail_screen.dart';
 import 'create_community_screen.dart';
 import 'church_detail_screen.dart';
@@ -290,6 +292,10 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
   leading: IconButton(
     icon: const Icon(Icons.add, color: Colors.white),
     onPressed: () async {
+      if (GuestSession.isGuest) {
+        GuestSignUpSheet.show(context);
+        return;
+      }
       final choice = await showModalBottomSheet<String>(
         context: context,
         backgroundColor: const Color(0xFF1A1A1A),
@@ -441,6 +447,10 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                             community: community,
                             isMember: true,
                             onTap: () async {
+                              if (GuestSession.isGuest) {
+                                GuestSignUpSheet.show(context);
+                                return;
+                              }
                               Map<String, dynamic> freshCommunity = community;
                               try {
                                 final result = await Supabase.instance.client
@@ -579,7 +589,13 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                                 return _CommunityCard(
                                   community: community,
                                   isMember: false,
-                                  onJoin: () => _joinCommunity(community['id']),
+                                  onJoin: () {
+                                    if (GuestSession.isGuest) {
+                                      GuestSignUpSheet.show(context);
+                                      return;
+                                    }
+                                    _joinCommunity(community['id']);
+                                  },
                                 );
                               },
                             ),
@@ -599,12 +615,18 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const QrScanScreen()),
-                    ).then((_) {
-                      AppCache.instance.invalidateChurches();
-                      _loadFollowedChurches(forceRefresh: true);
-                    }),
+                    onPressed: () {
+                      if (GuestSession.isGuest) {
+                        GuestSignUpSheet.show(context);
+                        return;
+                      }
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const QrScanScreen()),
+                      ).then((_) {
+                        AppCache.instance.invalidateChurches();
+                        _loadFollowedChurches(forceRefresh: true);
+                      });
+                    },
                     icon: const Icon(Icons.qr_code_scanner),
                     label: const Text('Scan church QR code',
                         style: TextStyle(fontWeight: FontWeight.w600)),
@@ -648,6 +670,10 @@ class _CommunitiesScreenState extends State<CommunitiesScreen>
                                 return _ChurchCard(
                                   church: church,
                                   onTap: () async {
+                                    if (GuestSession.isGuest) {
+                                      GuestSignUpSheet.show(context);
+                                      return;
+                                    }
                                     await Navigator.of(context).push(
                                       MaterialPageRoute(builder: (_) => ChurchDetailScreen(church: church)),
                                     );
