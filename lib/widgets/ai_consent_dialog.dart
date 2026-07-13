@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AiConsentDialog {
-  static const _prefKey = 'ai_consent_given';
+  static String _prefKey() {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    return uid != null ? 'ai_consent_given_$uid' : 'ai_consent_given';
+  }
 
   static Future<bool> hasConsent() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey) ?? false;
+    return prefs.getBool(_prefKey()) ?? false;
   }
 
   static Future<void> _saveConsent() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey, true);
+    await prefs.setBool(_prefKey(), true);
   }
 
   /// Shows the consent dialog if the user hasn't already consented.
