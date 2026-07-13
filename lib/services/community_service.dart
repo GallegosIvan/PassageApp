@@ -124,17 +124,18 @@ class CommunityService {
     String? filterBook,
   }) async {
     final userId = _client.auth.currentUser?.id;
-    if (userId == null) return [];
 
     try {
-      final memberships = await _client
-          .from('community_members')
-          .select('community_id')
-          .eq('user_id', userId);
-
-      final joinedIds = (memberships as List)
-          .map((m) => m['community_id'] as String)
-          .toList();
+      List<String> joinedIds = [];
+      if (userId != null) {
+        final memberships = await _client
+            .from('community_members')
+            .select('community_id')
+            .eq('user_id', userId);
+        joinedIds = (memberships as List)
+            .map((m) => m['community_id'] as String)
+            .toList();
+      }
 
       var query = _client
           .from('communities')

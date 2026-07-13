@@ -863,6 +863,7 @@ class _GuestProfileScreen extends StatelessWidget {
               child: TextButton(
                 onPressed: () async {
                   await GuestSession.end();
+                  AppCache.instance.clear();
                   if (context.mounted) {
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute(builder: (_) => const LandingScreen()),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../screens/auth/landing_screen.dart';
 import '../services/guest_session.dart';
+import '../services/app_cache.dart';
 
 class GuestSignUpSheet extends StatelessWidget {
   const GuestSignUpSheet({super.key});
@@ -59,6 +60,7 @@ class GuestSignUpSheet extends StatelessWidget {
             child: ElevatedButton(
               onPressed: () async {
                 await GuestSession.end();
+                AppCache.instance.clear();
                 if (context.mounted) {
                   Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (_) => const LandingScreen()),
