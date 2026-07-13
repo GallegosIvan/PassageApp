@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
 import '../terms_gate_screen.dart';
+import '../home/main_screen.dart';
 
 // ============================================================
 // LANDING SCREEN
@@ -114,7 +115,27 @@ class LandingScreen extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 16),
+
+              // ── BROWSE AS GUEST ───────────────────────────
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (_) => const TermsGateScreen(
+                        isGuestMode: true,
+                        nextScreen: MainScreen(),
+                      ),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'Browse without account',
+                  style: TextStyle(color: Colors.white38, fontSize: 14),
+                ),
+              ),
+
+              const SizedBox(height: 24),
             ],
           ),
         ),

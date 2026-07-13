@@ -11,6 +11,7 @@ import '../../services/community_service.dart';
 import '../../widgets/upgrade_sheet.dart';
 import '../../widgets/restricted_dialog.dart';
 import '../../widgets/rate_us_dialog.dart';
+import '../../widgets/ai_consent_dialog.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class BibleReaderScreen extends StatefulWidget {
@@ -343,7 +344,9 @@ class _BibleReaderScreenState extends State<BibleReaderScreen> {
     );
   }
 
-  void _showQuizSheet() {
+  Future<void> _showQuizSheet() async {
+    final allowed = await AiConsentDialog.requestConsent(context);
+    if (!allowed || !mounted) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.black,

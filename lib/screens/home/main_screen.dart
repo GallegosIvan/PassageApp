@@ -6,6 +6,8 @@ import '../bible/bible_books_screen.dart';
 import '../communities/communities_screen.dart';
 import '../profile/profile_screen.dart';
 import '../splash_screen.dart';
+import '../guest_tab_placeholder.dart';
+import '../../services/guest_session.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -19,12 +21,19 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Timer? _connectivityTimer;
   bool _checkingConnectivity = false;
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const BibleBooksScreen(),
-    const CommunitiesScreen(),
-    const ProfileScreen(),
-  ];
+  List<Widget> get _screens => GuestSession.isGuest
+      ? const [
+          HomeScreen(),
+          BibleBooksScreen(),
+          GuestTabPlaceholder(featureName: 'Communities', icon: Icons.people_outline),
+          GuestTabPlaceholder(featureName: 'Profile', icon: Icons.person_outline),
+        ]
+      : const [
+          HomeScreen(),
+          BibleBooksScreen(),
+          CommunitiesScreen(),
+          ProfileScreen(),
+        ];
 
   @override
   void initState() {

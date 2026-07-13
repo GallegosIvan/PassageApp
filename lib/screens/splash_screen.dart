@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'home/main_screen.dart';
 import 'auth/landing_screen.dart';
 import 'onboarding_flow.dart';
+import '../services/guest_session.dart';
 
 class SplashScreen extends StatefulWidget {
   final bool showNoInternet;
@@ -45,6 +46,16 @@ class _SplashScreenState extends State<SplashScreen> {
     final connected = await _hasInternet();
     if (!connected) {
       if (mounted) setState(() => _noInternet = true);
+      return;
+    }
+
+    await GuestSession.init();
+    if (GuestSession.isGuest) {
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+        );
+      }
       return;
     }
 

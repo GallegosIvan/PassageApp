@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/guest_session.dart';
 
 // ============================================================
 // TERMS OF SERVICE / PRIVACY POLICY GATE
@@ -26,8 +27,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 class TermsGateScreen extends StatefulWidget {
   final Widget nextScreen;
+  final bool isGuestMode;
 
-  const TermsGateScreen({super.key, required this.nextScreen});
+  const TermsGateScreen({super.key, required this.nextScreen, this.isGuestMode = false});
 
   // Terms re-prompting is now handled automatically via the
   // sync-terms-version Edge Function which checks Termly's API
@@ -51,13 +53,17 @@ class _TermsGateScreenState extends State<TermsGateScreen> {
     // signup, no account created yet), this call will fail
     // harmlessly, and signup_screen.dart records it instead, the
     // moment the account is actually created.
-    try {
-      final session = Supabase.instance.client.auth.currentSession;
-      if (session != null) {
-        await Supabase.instance.client.rpc('accept_terms');
+    if (widget.isGuestMode) {
+      await GuestSession.start();
+    } else {
+      try {
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session != null) {
+          await Supabase.instance.client.rpc('accept_terms');
+        }
+      } catch (e) {
+        print('accept_terms error: $e');
       }
-    } catch (e) {
-      print('accept_terms error: $e');
     }
 
     final prefs = await SharedPreferences.getInstance();
