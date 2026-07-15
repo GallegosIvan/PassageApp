@@ -37,7 +37,7 @@ dependencies:
 
   mobile_scanner: ^5.2.3
 
-  in_app_review: ^2.0.9
+  in_app_review: ^2.0.0
 
   share_plus: ^10.1.4
 

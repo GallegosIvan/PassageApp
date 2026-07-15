@@ -77,6 +77,8 @@ class RatingPromptService {
 
   // ── TRIGGER THE NATIVE REVIEW PROMPT ───────────────────────
   // Called only after the user answers "Yes" to the pre-prompt.
+  // Tries the native StoreKit prompt first; falls back to opening
+  // the App Store listing directly so the user can always rate.
   Future<void> requestNativeReview() async {
     try {
       final available = await _inAppReview.isAvailable();
@@ -87,6 +89,9 @@ class RatingPromptService {
       }
     } catch (e) {
       print('requestNativeReview error: $e');
+      // Native prompt failed — open the store listing so the user
+      // can still leave a review.
+      await openStoreListing();
     }
   }
 
