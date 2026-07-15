@@ -499,12 +499,18 @@ class _PlanCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  price,
-                  style: TextStyle(
-                    color: isSelected ? Colors.black : Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      price,
+                      style: TextStyle(
+                        color: isSelected ? Colors.black : Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
                 Text(
