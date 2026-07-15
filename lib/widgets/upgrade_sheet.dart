@@ -11,7 +11,12 @@ class UpgradeSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const UpgradeSheet(),
+      builder: (context) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.72,
+        ),
+        child: const UpgradeSheet(),
+      ),
     );
   }
 
@@ -137,25 +142,15 @@ class _UpgradeSheetState extends State<UpgradeSheet> {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 12, bottom: 20),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  Positioned(
-                    right: 8,
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: const Icon(Icons.close, color: Colors.white54, size: 22),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
 
