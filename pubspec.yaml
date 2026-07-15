@@ -1,7 +1,7 @@
 name: passage
 description: A Bible study community app.
 publish_to: 'none'
-version: 1.0.1+12
+version: 1.0.1+32
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
